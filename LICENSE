@@ -1,0 +1,54 @@
+Artistic License 2.0
+
+Copyright (c) 2000-2006, The Perl Foundation.
+
+Everyone is permitted to copy and distribute verbatim copies of this
+license document, but changing it is not allowed.
+
+Preamble
+
+This license establishes the terms under which a given free software
+Package may be copied, modified, distributed, and/or redistributed.
+The intent is that the Copyright Holder maintains some artistic
+control over the development of that Package while still keeping the
+Package available as open source and free software.
+
+You are always permitted to make arrangements wholly outside of this
+license directly with the Copyright Holder of a given Package. If the
+terms of this license do not permit the full use that you propose to
+make of the Package, you should contact the Copyright Holder and seek
+a different licensing arrangement.
+
+Definitions
+
+    "Copyright Holder" means the individual(s) or organization(s) named
+    in the copyright notice for the entire Package.
+
+    "Contributor" means any party that has contributed code that gets
+    used in this Package.
+
+    "Distributable Code" means all of the real-world, non-developer,
+    tools, data, and source code that's in the Package.
+
+    "Package" means the collection of Distributable Code passed to
+    you, plus any accompanying documentation.
+
+    "Standard Version" refers to such a Package if it has not been
+    modified, or has been modified in accordance with the consent of
+    the Copyright Holder.
+
+    "Modified Version" means such a Package, if it has been changed.
+
+    "Consent" means the Copyright Holder has given explicit permission
+    to do something that otherwise would not be permitted under this
+    License.
+
+    "Distributor" means any party that distributes the Package.
+
+    "Maintainer" means whoever is designated as such by the Copyright
+    Holder.
+
+[Full text: https://opensource.org/licenses/Artistic-2.0]
+
+This package uses the Artistic License 2.0, which is OSI-approved and
+Bioconductor-compatible. No commercial-use restrictions.

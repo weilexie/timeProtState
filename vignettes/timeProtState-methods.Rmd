@@ -1,0 +1,121 @@
+---
+title: "timeProtState: Statistical Methods"
+author: "timeProtState authors"
+date: "`r Sys.Date()`"
+output:
+  BiocStyle::html_document:
+    toc_float: true
+vignette: >
+  %\VignetteIndexEntry{Statistical Methods}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+```
+
+# Shared-baseline design
+
+For a shared-baseline time-course with conditions $c = 1 \ldots C$, non-baseline
+times $t = 1 \ldots T$, and a single shared baseline at time 0, the saturated
+group-means design is:
+
+$$X = \text{model.matrix}(\sim 0 + \text{group})$$
+
+where the baseline is a **single** column shared by all conditions (not
+replicated per condition). This avoids the inflation caused by copying the
+baseline, which artificially weights day-0 in downstream clustering.
+
+# Contrast families
+
+`tps_make_contrasts()` builds six families:
+
+- **vs-baseline**: $D_{c,t} = \mu_{c,t} - \mu_0$ (single t-tests)
+- **within-condition**: consecutive or all-pairs temporal contrasts
+- **average-time**: $A_t = \frac{1}{C}\sum_c \mu_{c,t} - \mu_0$ (omnibus F)
+- **heterogeneity**: $\mu_{c,t} - \mu_{c_{ref},t}$ (omnibus F, full rank)
+- **within-omnibus**: per-condition vs-baseline jointly (omnibus F)
+- **endpoint**: $\mu_{c,t_{end}} - \mu_0$ (single t-tests)
+
+## Note on reference-invariance
+
+The heterogeneity family is reference-invariant in its **column subspace**:
+changing the reference condition spans the same model-difference subspace
+(equal rank). However, limma moderated F/t statistics are **not** numerically
+invariant under re-parameterization, because `eBayes` variance moderation
+depends on the residual structure. Use `tps_make_contrasts(reference_condition=)`
+freely — conclusions are stable — but do not expect bit-identical P-values.
+
+# Evidence-decomposed protein states
+
+Rather than a black-box label, `tps_classify_states()` computes three
+transparent axes:
+
+1. **temporal_evidence**: from average-time + within-omnibus F-tests
+2. **condition_heterogeneity**: from the heterogeneity F-test
+3. **direction_pattern**: from endpoint contrast signs across conditions
+
+These combine into a final `state` (e.g. `shared_dynamic_up`,
+`condition_dependent_dynamic`, `cross_condition_opposite`), but the raw axes
+are always retained for auditability.
+
+# Pathway NET / REM / COH
+
+For pathway $g$ and contrast $j$, with protein-level statistic $s_{i,j}$
+(default: moderated t):
+
+$$\text{NET}_{g,j} = \frac{\sum_i M_{g,i} s_{i,j}}{\sum_i M_{g,i}}, \quad
+  \text{REM}_{g,j} = \frac{\sum_i M_{g,i} |s_{i,j}|}{\sum_i M_{g,i}}, \quad
+  \text{COH}_{g,j} = \frac{|\text{NET}_{g,j}|}{\text{REM}_{g,j} + \varepsilon}$$
+
+- **NET**: net directional shift
+- **REM**: total remodeling magnitude
+- **COH**: directional coherence in $[0,1]$
+
+## Permutation calibration
+
+The default null is **abundance-stratified**: proteins are binned into equal-
+frequency abundance quantiles and permuted within each bin. This controls for
+abundance confounding while keeping pathway correlations via a shared
+permutation structure. Empirical p-values use $+1$ smoothing:
+
+$$p = \frac{\#\{|NET_{null}| \geq |NET_{obs}|\} + 1}{N_{perm} + 1}$$
+
+**Calibration caveat**: abundance stratification reduces anti-conservative
+bias but does not fully correct it, because within-pathway protein correlations
+cannot be captured by label permutation. Interpret borderline q-values
+cautiously and report the calibration mode used.
+
+# Contrast-driven pathway remodeling dynamics
+
+The pathway scores (NET/REM/COH) are computed for each **contrast**. By
+passing `family = "vs_baseline"` to `tps_pathway_scores()`, the package
+obtains scores for every (condition, timepoint) pair — not just the
+endpoint. This yields a **pathway remodeling trajectory**: how NET, REM, and
+COH evolve over time, calibrated by per-timepoint permutation.
+
+`tps_classify_pathway_dynamics()` classifies these trajectories into
+interpretable dynamic patterns:
+
+- **early_directional**: NET significant and coherent from the first timepoint
+- **gradual_remodeling**: REM increases progressively, COH rises over time
+- **delayed_opposition**: only the last timepoint shows significant NET with
+  low COH (internal conflict emerges late)
+- **transient_burst**: REM peaks mid-course, then subsides
+- **directional_delayed**: NET becomes significant at later timepoints
+- **sustained_remodeling**: REM significant throughout, NET never directional
+- **divergent**: conditions separate in NET direction at some timepoint
+
+This is the key differentiator from two-step pipelines (protein DE →
+enrichment): the full rank-audited contrast family's moderated statistics
+drive pathway-level inference directly, preserving direction and uncertainty
+at every timepoint. `tps_link_states_pathways()` further connects
+protein-level evidence states to pathway-level dynamics, enabling diagnoses
+like "do temporal-reversal proteins cluster in transient-burst pathways?"
+
+# Session info
+
+```{r}
+sessionInfo()
+```

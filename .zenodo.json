@@ -1,0 +1,11 @@
+{
+  "title": "timeProtState R package",
+  "description": "Contrast-aware dynamic and pathway remodeling state analysis for time-course proteomics. R/Bioconductor package.",
+  "creators": [{"name": "timeProtState authors"}],
+  "keywords": ["proteomics","time-course","shared baseline","contrast analysis","pathway remodeling","Bioconductor","limma","permutation"],
+  "license": "Artistic-2.0",
+  "access_right": "open",
+  "upload_type": "software",
+  "language": "eng",
+  "communities": [{"identifier": "bioconductor"}]
+}

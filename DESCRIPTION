@@ -1,0 +1,47 @@
+Package: timeProtState
+Type: Package
+Title: Contrast-Aware Dynamic State Analysis for Time-Course Proteomics
+Version: 0.99.0
+Date: 2026-08-05
+Authors@R: c(
+    person(given = "Given", family = "Family",
+           email = "maintainer@example.org",
+           role = c("aut", "cre")))
+Description: Provides an auditable framework for shared-baseline,
+    multi-condition time-course proteomics experiments. The package
+    constructs estimable contrast families from a saturated group-means
+    design, decomposes protein-level temporal and condition-dependent
+    evidence into transparent axes, and computes permutation-calibrated
+    directional and remodeling pathway states. Includes trajectory
+    clustering, simulation for benchmarks, and structured export.
+License: Artistic-2.0 | file LICENSE
+Encoding: UTF-8
+LazyData: true
+Depends:
+    R (>= 4.5.0)
+Imports:
+    methods,
+    stats,
+    utils,
+    SummarizedExperiment,
+    S4Vectors,
+    limma,
+    Matrix,
+    rlang
+Suggests:
+    testthat (>= 3.0.0),
+    knitr,
+    rmarkdown,
+    BiocStyle,
+    BiocParallel,
+    Mfuzz,
+    Biobase,
+    e1071,
+    cluster,
+    ggplot2
+VignetteBuilder: knitr
+Config/testthat/edition: 3
+URL: https://github.com/timeProtState/timeProtState
+BugReports: https://github.com/timeProtState/timeProtState/issues
+biocViews: Proteomics, TimeCourse, DifferentialExpression, Software
+RoxygenNote: 7.3.3

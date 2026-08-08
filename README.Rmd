@@ -1,0 +1,58 @@
+---
+title: "timeProtState"
+output: github_document
+---
+
+# timeProtState
+
+> Contrast-aware dynamic state analysis for time-course proteomics
+
+`timeProtState` is an R/Bioconductor-style package for analyzing
+**shared-baseline, multi-condition time-course proteomics** experiments. It
+provides:
+
+- **Shared-baseline contrast grammar**: automatic construction of estimable,
+  full-rank contrast families from a saturated group-means design (baseline
+  modeled once, not copied per condition).
+- **Evidence-decomposed protein states**: temporal, condition-heterogeneity,
+  and direction axes combined into auditable state labels.
+- **Permutation-calibrated pathway states**: NET (net direction), REM
+  (remodeling magnitude), COH (coherence), with abundance-stratified null.
+
+## Installation
+
+```r
+# Once on Bioconductor (devel):
+# BiocManager::install("timeProtState")
+
+# Development version:
+# remotes::install_github("timeProtState/timeProtState")
+```
+
+## Quick start
+
+```r
+library(timeProtState)
+data("tps_example", package = "timeProtState")
+
+se <- tps_import(tps_example_abundance, tps_example_metadata,
+                 tps_example_annotation)
+design <- tps_make_design(se)
+contrasts <- tps_make_contrasts(design, endpoint = 7)
+fit <- tps_fit(se, design, contrasts)
+states <- tps_classify_states(fit)
+states
+```
+
+See the vignettes for the full pipeline including pathway analysis and
+visualization.
+
+## Scope
+
+The package starts from a **protein-level abundance matrix** (already
+quantified and log2-transformed). It does **not** process raw mass-spectrometry
+files, perform peptide-to-protein summarization, or impute by default.
+
+## License
+
+Artistic-2.0

@@ -1,0 +1,6 @@
+*.Rcheck/
+*.tar.gz
+.Rproj.user/
+vignettes/*.html
+vignettes/*.R
+inst/doc/

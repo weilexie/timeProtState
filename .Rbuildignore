@@ -1,0 +1,10 @@
+^.*\.Rproj$
+^\.Rproj\.user$
+^data-raw$
+^\.github$
+^docs$
+^LICENSE\.md$
+^cran-comments$
+^RELEASE_PROCESS\.md$
+^CITATION\.cff$
+^\.zenodo\.json$

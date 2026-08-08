@@ -1,0 +1,17 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "timeProtState: contrast-aware dynamic and pathway remodeling state analysis for time-course proteomics"
+authors:
+  - family-names: "timeProtState"
+    given-names: "authors"
+version: "0.99.0"
+date-released: "2026-08-06"
+license: Artistic-2.0
+repository-code: "https://github.com/timeProtState/timeProtState"
+keywords:
+  - proteomics
+  - time-course
+  - shared-baseline
+  - contrast-analysis
+  - pathway-remodeling
+  - Bioconductor

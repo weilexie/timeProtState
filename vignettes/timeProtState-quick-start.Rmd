@@ -1,0 +1,140 @@
+---
+title: "timeProtState: Quick Start"
+author: "timeProtState authors"
+date: "`r Sys.Date()`"
+output:
+  BiocStyle::html_document:
+    toc_float: true
+vignette: >
+  %\VignetteIndexEntry{Quick Start}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>",
+  fig.width = 6, fig.height = 4
+)
+```
+
+# Introduction
+
+`timeProtState` analyzes **shared-baseline, multi-condition time-course
+proteomics** experiments. It converts a protein-level abundance matrix into:
+
+1. **Estimable contrast families** from a saturated group-means design
+   (the shared baseline is modeled once, not copied per condition).
+2. **Transparent protein dynamic states** decomposed into temporal,
+   condition-heterogeneity, and direction evidence axes.
+3. **Permutation-calibrated pathway directional/remodeling states**
+   (NET / REM / COH), with abundance-stratified null for better calibration.
+
+This vignette walks through the full pipeline on a small synthetic example.
+
+# Quick start
+
+```{r setup}
+library(timeProtState)
+```
+
+## Import and validate
+
+```{r import}
+data("tps_example", package = "timeProtState")
+se <- tps_import(
+  abundance = tps_example_abundance,
+  col_data  = tps_example_metadata,
+  row_data  = tps_example_annotation
+)
+report <- tps_validate(se)
+report
+```
+
+The validator confirms the shared-baseline structure and reports any
+low-replicate or all-NA issues.
+
+## Design and contrasts
+
+```{r design}
+design <- tps_make_design(se)
+design$rank_audit
+contrasts <- tps_make_contrasts(design, endpoint = 7)
+contrasts
+```
+
+Six contrast families are generated (vs-baseline, within-condition,
+average-time, heterogeneity, within-omnibus, endpoint), each reported with
+its effective rank.
+
+## Fit and classify protein states
+
+```{r fit}
+fit <- tps_fit(se, design, contrasts)
+states <- tps_classify_states(fit)
+states
+```
+
+The default decision rule uses Benjamini-Hochberg FDR < 0.05 with no logFC
+gate. A legacy profile reproduces raw-P + effect-size rules:
+
+```{r legacy-rule}
+legacy_rule <- tps_decision_rule(
+  significance = "P.Value", alpha = 0.05, lfc_threshold = 0.74
+)
+```
+
+## Trajectories and clustering
+
+```{r traj}
+traj <- tps_trajectory_matrix(se)
+dim(traj$unique_cell)   # baseline appears ONCE
+cl <- tps_cluster_trajectories(traj, method = "kmeans", k = 4, seed = 1)
+cl
+```
+
+## Pathway remodeling dynamics
+
+The key methodological feature: pathway scores can be computed for **all
+timepoints** (not just the endpoint) by passing `family = "vs_baseline"`.
+This yields NET/REM/COH trajectories that show how each pathway remodels
+over time.
+
+```{r pathway}
+## Use vs_baseline to get all timepoints (contrast-driven dynamics)
+pws <- tps_pathway_scores(fit, tps_example_term2gene,
+                          id_col = "locus_tag", family = "vs_baseline")
+ave <- as.numeric(tapply(
+  tps_results(fit, "vs_baseline")$AveExpr,
+  factor(tps_results(fit, "vs_baseline")$feature_id,
+         levels = rownames(pws$statistic_matrix)),
+  function(x) x[1]
+))
+pws_c <- tps_calibrate_pathways(pws, abundance = ave, n_perm = 200, seed = 1)
+
+## Classify pathway remodeling dynamics across the time course
+dyn <- tps_classify_pathway_dynamics(pws_c)
+head(dyn)
+table(dyn$dynamic_state)
+
+## Single-pathway trajectory plot (NET over time, by condition)
+## tps_plot_pathway_trajectory(pws_c, term = rownames(pws_c$scores$NET)[1])
+```
+
+For a single-timepoint (endpoint-only) analysis, use `family = "endpoint"`
+and `tps_classify_pathways()` instead.
+
+## Visualization
+
+```{r plots, eval = requireNamespace("ggplot2", quietly = TRUE)}
+tps_plot_volcano(fit, contrast = "endpoint_Acid_t7_vs_baseline")
+tps_plot_state_distribution(states)
+tps_plot_trajectories(cl)
+```
+
+# Session info
+
+```{r session}
+sessionInfo()
+```
