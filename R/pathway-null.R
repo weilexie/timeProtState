@@ -3,12 +3,11 @@
 ## ============================================================================
 ##
 ## Implements STATISTICAL_CONTRACT.md section 8.4-8.5 and DECISIONS D5.
-## Applies size-matched permutation null (default: abundance-stratified, the
-## best-calibrated mode validated in spike/pathway_remodeling_spike_stratified.R)
+## Applies a size-matched permutation null (default: abundance-stratified)
 ## to compute empirical p_net / p_rem, BH q-values, and pathway state labels.
 ##
-## Faithful to the validated spike: (+1) smoothing, per-contrast BH,
-## abundance 4-bin stratification keeping pathways correlated via shared perm.
+## Uses (+1) smoothing, per-contrast BH by default, and four-bin abundance
+## stratification with one shared permutation index across pathways.
 
 ## ---- stratification helpers ------------------------------------------------
 .make_abundance_bins <- function(abundance, n_bins) {
@@ -22,6 +21,20 @@
   br <- unique(br)  # collapse ties
   if (length(br) < 2L) return(rep(1L, length(abundance)))
   as.integer(cut(abundance, breaks = br, include.lowest = TRUE, labels = FALSE))
+}
+
+.adjust_p_matrix <- function(p, correction) {
+  out <- if (correction == "per_contrast") {
+    vapply(seq_len(ncol(p)), function(j) {
+      stats::p.adjust(p[, j], method = "BH")
+    }, numeric(nrow(p)))
+  } else {
+    matrix(stats::p.adjust(as.vector(p), method = "BH"),
+           nrow = nrow(p), ncol = ncol(p))
+  }
+  if (!is.matrix(out)) out <- matrix(out, nrow = nrow(p))
+  dimnames(out) <- dimnames(p)
+  out
 }
 
 ## generate a single permutation index under a given mode
@@ -45,19 +58,21 @@
 #' Calibrate pathway scores with a permutation null
 #'
 #' Applies a size-matched permutation null to a \code{tps_pathway_scores}
-#' object and computes empirical p-values for NET (two-sided) and REM
-#' (upper-tail), Benjamini-Hochberg q-values, and null mean/SD per pathway.
+#' object and computes empirical p-values for NET (two-sided around its
+#' permutation-null mean) and REM (upper-tail), Benjamini-Hochberg q-values,
+#' and null mean/SD per pathway.
 #'
-#' The default mode is \code{"abundance_stratified"} (validated in the spike
-#' as the best-calibrated null): proteins are binned into \code{n_bins}
-#' equal-frequency abundance quantiles and permuted within each bin, keeping
-#' pathway correlations via a shared permutation structure while controlling
-#' for abundance confounding.
+#' The default mode is \code{"abundance_stratified"}: proteins are binned into
+#' \code{n_bins} equal-frequency abundance quantiles and permuted within each
+#' bin. One shared permutation index retains overlap among pathway definitions;
+#' stratification reduces differences in abundance distributions but does not
+#' preserve within-pathway protein covariance.
 #'
 #' @param scores a \code{tps_pathway_scores} object from
 #'   \code{\link{tps_pathway_scores}}.
 #' @param abundance numeric vector of per-feature abundance (e.g. AveExpr from
-#'   limma), aligned to \code{scores$universe}. Required for
+#'   limma), aligned to \code{scores$feature_ids}. A named vector is reordered
+#'   when its names match either feature ids or mapped pathway ids. Required for
 #'   \code{abundance_stratified} mode; ignored for \code{unstratified}.
 #' @param n_perm integer; number of permutations (default 1000; use 5000+ for
 #'   publication).
@@ -104,7 +119,20 @@ tps_calibrate_pathways <- function(scores, abundance = NULL, n_perm = 1000L,
   n_prot <- nrow(stat_mat)
   n_path <- nrow(M)
   n_contr <- ncol(stat_mat)
-  if (n_perm < 1L) tps_abort("n_perm must be >= 1.")
+  if (!is.numeric(n_perm) || length(n_perm) != 1L || is.na(n_perm) ||
+      !is.finite(n_perm) || n_perm < 1L ||
+      n_perm != as.integer(n_perm)) {
+    tps_abort("n_perm must be one positive integer.")
+  }
+  if (!is.numeric(n_bins) || length(n_bins) != 1L || is.na(n_bins) ||
+      !is.finite(n_bins) || n_bins < 1L ||
+      n_bins != as.integer(n_bins)) {
+    tps_abort("n_bins must be one positive integer.")
+  }
+  if (!is.numeric(seed) || length(seed) != 1L || is.na(seed) ||
+      !is.finite(seed)) {
+    tps_abort("seed must be one finite value.")
+  }
 
   ## abundance alignment for stratified mode
   bin_list <- NULL; bin_template <- NULL
@@ -115,6 +143,25 @@ tps_calibrate_pathways <- function(scores, abundance = NULL, n_perm = 1000L,
     if (length(abundance) != n_prot) {
       tps_abort("abundance length (%d) != universe size (%d).",
                 length(abundance), n_prot)
+    }
+    if (!is.numeric(abundance) || any(!is.finite(abundance))) {
+      tps_abort("abundance must be numeric and finite for every feature.")
+    }
+    if (!is.null(names(abundance))) {
+      if (anyDuplicated(names(abundance))) {
+        tps_abort("named abundance values must have unique names.")
+      }
+      target <- if (all(scores$feature_ids %in% names(abundance))) {
+        scores$feature_ids
+      } else if (all(scores$universe %in% names(abundance))) {
+        scores$universe
+      } else {
+        NULL
+      }
+      if (is.null(target)) {
+        tps_abort("abundance names do not match score feature or pathway ids.")
+      }
+      abundance <- abundance[target]
     }
     ave_bin <- .make_abundance_bins(abundance, n_bins)
     bin_list <- split(seq_len(n_prot), ave_bin)
@@ -127,52 +174,54 @@ tps_calibrate_pathways <- function(scores, abundance = NULL, n_perm = 1000L,
   abs_stat <- abs(stat_mat)
 
   ## accumulators
-  net_null_absmax <- rem_null_ge <- net_null_sum <- net_null_sqsum <-
-    rem_null_sum <- rem_null_sqsum <-
+  rem_null_ge <- net_null_sum <- net_null_sqsum <- rem_null_sum <-
+    rem_null_sqsum <-
     matrix(0.0, n_path, n_contr)
 
-  ## local RNG stream (does not touch global .Random.seed)
-  rng_state_old <- .GlobalEnv$.Random.seed
-  on.exit({
-    if (is.null(rng_state_old)) {
-      rm(".Random.seed", envir = .GlobalEnv)
-    } else {
-      .GlobalEnv$.Random.seed <- rng_state_old
+  withr::with_seed(seed, {
+    for (b in seq_len(n_perm)) {
+      idx <- .perm_index(n_prot, mode, bin_list, bin_template)
+      Tp <- stat_mat[idx, , drop = FALSE]
+      net_b <- as.matrix(Mt %*% Tp) / sizes
+      rem_b <- as.matrix(Mt %*% abs_stat[idx, , drop = FALSE]) / sizes
+      rem_null_ge     <- rem_null_ge + (rem_b >= obs_rem - eps)
+      net_null_sum    <- net_null_sum + net_b
+      net_null_sqsum  <- net_null_sqsum + net_b^2
+      rem_null_sum    <- rem_null_sum + rem_b
+      rem_null_sqsum  <- rem_null_sqsum + rem_b^2
     }
-  }, add = TRUE)
-  set.seed(seed)
+  })
 
-  for (b in seq_len(n_perm)) {
-    idx <- .perm_index(n_prot, mode, bin_list, bin_template)
-    Tp <- stat_mat[idx, , drop = FALSE]
-    net_b <- as.matrix(Mt %*% Tp) / sizes
-    rem_b <- as.matrix(Mt %*% abs_stat[idx, , drop = FALSE]) / sizes
-    net_null_absmax <- net_null_absmax + (abs(net_b) >= abs(obs_net) - eps)
-    rem_null_ge     <- rem_null_ge + (rem_b >= obs_rem - eps)
-    net_null_sum    <- net_null_sum + net_b
-    net_null_sqsum  <- net_null_sqsum + net_b^2
-    rem_null_sum    <- rem_null_sum + rem_b
-    rem_null_sqsum  <- rem_null_sqsum + rem_b^2
-  }
-
-  p_net <- (net_null_absmax + 1) / (n_perm + 1)
-  p_rem <- (rem_null_ge + 1) / (n_perm + 1)
   net_null_mean <- net_null_sum / n_perm
   net_null_sd <- sqrt(pmax(net_null_sqsum / n_perm - net_null_mean^2, 0))
   rem_null_mean <- rem_null_sum / n_perm
   rem_null_sd <- sqrt(pmax(rem_null_sqsum / n_perm - rem_null_mean^2, 0))
-  q_net <- if (correction == "per_contrast") {
-    apply(p_net, 2L, function(p) stats::p.adjust(p, method = "BH"))
-  } else {
-    matrix(stats::p.adjust(as.vector(p_net), method = "BH"),
-           nrow = nrow(p_net), ncol = ncol(p_net), dimnames = dimnames(p_net))
-  }
-  q_rem <- if (correction == "per_contrast") {
-    apply(p_rem, 2L, function(p) stats::p.adjust(p, method = "BH"))
-  } else {
-    matrix(stats::p.adjust(as.vector(p_rem), method = "BH"),
-           nrow = nrow(p_rem), ncol = ncol(p_rem), dimnames = dimnames(p_rem))
-  }
+  dimnames(net_null_mean) <- dimnames(obs_net)
+  dimnames(net_null_sd) <- dimnames(obs_net)
+  dimnames(rem_null_mean) <- dimnames(obs_rem)
+  dimnames(rem_null_sd) <- dimnames(obs_rem)
+
+  ## A two-sided permutation test must be centered on the permutation-null
+  ## mean. Comparing |NET| directly with |NET_null| is biased when the whole
+  ## protein universe has a directional shift. Replay the deterministic
+  ## permutation stream now that the null centers are known.
+  net_null_ge <- matrix(0.0, n_path, n_contr)
+  observed_net_departure <- abs(obs_net - net_null_mean)
+  withr::with_seed(seed, {
+    for (b in seq_len(n_perm)) {
+      idx <- .perm_index(n_prot, mode, bin_list, bin_template)
+      net_b <- as.matrix(Mt %*% stat_mat[idx, , drop = FALSE]) / sizes
+      net_null_ge <- net_null_ge +
+        (abs(net_b - net_null_mean) >= observed_net_departure - eps)
+    }
+  })
+
+  p_net <- (net_null_ge + 1) / (n_perm + 1)
+  p_rem <- (rem_null_ge + 1) / (n_perm + 1)
+  dimnames(p_net) <- dimnames(obs_net)
+  dimnames(p_rem) <- dimnames(obs_rem)
+  q_net <- .adjust_p_matrix(p_net, correction)
+  q_rem <- .adjust_p_matrix(p_rem, correction)
 
   ## append calibrate provenance as a new element in the provenance list.
   new_prov <- .make_provenance(arg_capture, scores, stage = "calibrate_pathways")
@@ -189,6 +238,7 @@ tps_calibrate_pathways <- function(scores, abundance = NULL, n_perm = 1000L,
   out$net_null_mean <- net_null_mean; out$net_null_sd <- net_null_sd
   out$rem_null_mean <- rem_null_mean; out$rem_null_sd <- rem_null_sd
   out$n_perm <- n_perm; out$mode <- mode; out$n_bins <- n_bins; out$seed <- seed
+  out$abundance_bins <- if (mode == "abundance_stratified") ave_bin else NULL
   out$provenance <- combined_prov
   out$correction <- correction
   class(out) <- c("tps_pathway_calibrated", class(scores))
@@ -198,11 +248,20 @@ tps_calibrate_pathways <- function(scores, abundance = NULL, n_perm = 1000L,
 ## ---- classification --------------------------------------------------------
 .classify_one_pathway <- function(net, rem, coh, q_net, q_rem,
                                    alpha = 0.05, coh_cut = 0.5) {
-  if (q_rem >= alpha && q_net >= alpha) return("no_strong_state")
-  if (q_net < alpha && net > 0 && coh >= coh_cut) return("directional_up")
-  if (q_net < alpha && net < 0 && coh >= coh_cut) return("directional_down")
-  if (q_rem < alpha && (q_net >= alpha || coh < coh_cut)) return("mixed_remodeling")
-  if (q_net < alpha && coh < coh_cut) return("directional_with_internal_opposition")
+  if (isTRUE(q_rem >= alpha) && isTRUE(q_net >= alpha)) return("no_strong_state")
+  if (isTRUE(q_net < alpha) && isTRUE(net > 0) && isTRUE(coh >= coh_cut)) {
+    return("directional_up")
+  }
+  if (isTRUE(q_net < alpha) && isTRUE(net < 0) && isTRUE(coh >= coh_cut)) {
+    return("directional_down")
+  }
+  if (isTRUE(q_rem < alpha) &&
+      (isTRUE(q_net >= alpha) || isTRUE(coh < coh_cut))) {
+    return("mixed_remodeling")
+  }
+  if (isTRUE(q_net < alpha) && isTRUE(coh < coh_cut)) {
+    return("directional_with_internal_opposition")
+  }
   "no_strong_state"
 }
 
@@ -238,6 +297,14 @@ tps_classify_pathways <- function(calibrated, alpha = 0.05, coh_cut = 0.5) {
   if (!inherits(calibrated, "tps_pathway_calibrated")) {
     tps_abort(paste0("calibrated must be a tps_pathway_calibrated object; run ",
                      "tps_calibrate_pathways first."))
+  }
+  if (!is.numeric(alpha) || length(alpha) != 1L || is.na(alpha) ||
+      !is.finite(alpha) || alpha <= 0 || alpha >= 1) {
+    tps_abort("alpha must be in (0,1).")
+  }
+  if (!is.numeric(coh_cut) || length(coh_cut) != 1L || is.na(coh_cut) ||
+      !is.finite(coh_cut) || coh_cut < 0 || coh_cut > 1) {
+    tps_abort("coh_cut must be in [0,1].")
   }
   NET <- calibrated$scores$NET; REM <- calibrated$scores$REM
   COH <- calibrated$scores$COH

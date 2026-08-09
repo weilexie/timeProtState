@@ -26,7 +26,7 @@
   }
   nb <- !is_bl
   base <- group_levels[nb]
-  cond[nb] <- sub("_[0-9.]+$", "", base)
+  cond[nb] <- sub("_[^_]+$", "", base)
   time[nb] <- sub("^.*_", "", base)
   data.frame(cell = group_levels, condition = cond, time = time,
              is_baseline = is_bl, stringsAsFactors = FALSE)
@@ -49,8 +49,10 @@
 #'   \code{"consecutive"} (default) or \code{"all_pairs"}.
 #' @param reference_condition character; the condition used as reference for
 #'   the heterogeneity family. If \code{NULL}, the first non-baseline
-#'   condition (alphabetical) is used. Heterogeneity F-statistics are
-#'   reference-invariant.
+#'   condition (alphabetical) is used. The heterogeneity contrast subspace is
+#'   reference-invariant. With feature-level missing values, numerical limma
+#'   F-statistics can differ slightly because \code{contrasts.fit} uses an
+#'   approximate covariance transformation.
 #' @param include_average_time logical; include the average-time family (C).
 #' @param include_heterogeneity logical; include the heterogeneity family (D).
 #' @param include_within_omnibus logical; include within-condition omnibus (E).
@@ -59,6 +61,7 @@
 #'   flattened \code{contrast_table}, and \code{provenance}.
 #'
 #' @examples
+#' data(tps_example, package = "timeProtState")
 #' se <- tps_import(tps_example_abundance, tps_example_metadata)
 #' design <- tps_make_design(se)
 #' contrasts <- tps_make_contrasts(design, endpoint = 7)
@@ -82,12 +85,19 @@ tps_make_contrasts <- function(design, endpoint = NULL,
   if (!inherits(design, "tps_design")) {
     tps_abort("design must be a tps_design object from tps_make_design.")
   }
+  flags <- c(include_average_time, include_heterogeneity,
+             include_within_omnibus)
+  if (!is.logical(flags) || length(flags) != 3L || anyNA(flags)) {
+    tps_abort("contrast-family include flags must be TRUE or FALSE.")
+  }
   levels_d <- colnames(design$design_matrix)
-  cells <- .parse_cells(levels_d)
+  cells <- .parse_cells(design$group_levels)
   if (!design$baseline$shared_baseline) {
-    tps_abort("tps_make_contrasts requires a shared-baseline design; this ",
-              "design is not shared-baseline. Use a general group-means ",
-              "approach or fix the input.")
+    tps_abort(paste0(
+      "tps_make_contrasts requires a shared-baseline design; this ",
+      "design is not shared-baseline. Use a general group-means ",
+      "approach or fix the input."
+    ))
   }
   conditions <- sort(unique(cells$condition[!cells$is_baseline]))
   if (length(conditions) < 1L) {
@@ -100,12 +110,20 @@ tps_make_contrasts <- function(design, endpoint = NULL,
               length(times))
   }
   if (is.null(endpoint)) endpoint <- max(times)
+  if (!is.numeric(endpoint) || length(endpoint) != 1L ||
+      is.na(endpoint) || !is.finite(endpoint)) {
+    tps_abort("endpoint must be NULL or one finite numeric timepoint.")
+  }
   if (!endpoint %in% times) {
     tps_abort("endpoint = %s is not among non-baseline timepoints (%s).",
               endpoint, paste(times, collapse = ", "))
   }
   if (is.null(reference_condition)) {
     reference_condition <- conditions[1L]
+  }
+  if (!is.character(reference_condition) || length(reference_condition) != 1L ||
+      is.na(reference_condition) || !nzchar(reference_condition)) {
+    tps_abort("reference_condition must be one non-empty condition name.")
   }
   if (!reference_condition %in% conditions) {
     tps_abort("reference_condition '%s' not among conditions (%s).",
@@ -116,38 +134,42 @@ tps_make_contrasts <- function(design, endpoint = NULL,
   family_meta <- list()
 
   ## ---- A. vs_baseline -----------------------------------------------------
-  fam_A <- .build_vs_baseline(cells, conditions, times)
+  fam_A <- .build_vs_baseline(cells, conditions, times, levels_d)
   families[["vs_baseline"]] <- fam_A$cmat
   family_meta[["vs_baseline"]] <- fam_A$meta
 
   ## ---- B. within_condition ------------------------------------------------
-  fam_B <- .build_within_condition(cells, conditions, times, within)
+  fam_B <- .build_within_condition(cells, conditions, times, within, levels_d)
   families[["within_condition"]] <- fam_B$cmat
   family_meta[["within_condition"]] <- fam_B$meta
 
   ## ---- C. average_time ----------------------------------------------------
   if (include_average_time) {
-    fam_C <- .build_average_time(cells, conditions, times)
+    fam_C <- .build_average_time(cells, conditions, times, levels_d)
     families[["average_time"]] <- fam_C$cmat
     family_meta[["average_time"]] <- fam_C$meta
   }
 
   ## ---- D. heterogeneity ---------------------------------------------------
-  if (include_heterogeneity) {
-    fam_D <- .build_heterogeneity(cells, conditions, times, reference_condition)
+  if (include_heterogeneity && length(conditions) >= 2L) {
+    fam_D <- .build_heterogeneity(
+      cells, conditions, times, reference_condition, levels_d
+    )
     families[["heterogeneity"]] <- fam_D$cmat
     family_meta[["heterogeneity"]] <- fam_D$meta
+  } else if (include_heterogeneity) {
+    tps_warn("heterogeneity family omitted because the design has one condition.")
   }
 
   ## ---- E. within_omnibus --------------------------------------------------
   if (include_within_omnibus) {
-    fam_E <- .build_within_omnibus(cells, conditions, times)
+    fam_E <- .build_within_omnibus(cells, conditions, times, levels_d)
     families[["within_omnibus"]] <- fam_E$cmat
     family_meta[["within_omnibus"]] <- fam_E$meta
   }
 
   ## ---- F. endpoint --------------------------------------------------------
-  fam_F <- .build_endpoint(cells, conditions, endpoint)
+  fam_F <- .build_endpoint(cells, conditions, endpoint, levels_d)
   families[["endpoint"]] <- fam_F$cmat
   family_meta[["endpoint"]] <- fam_F$meta
 
@@ -188,8 +210,7 @@ tps_make_contrasts <- function(design, endpoint = NULL,
   v
 }
 
-.build_vs_baseline <- function(cells, conditions, times) {
-  levels_d <- cells$cell
+.build_vs_baseline <- function(cells, conditions, times, levels_d) {
   bl <- "baseline"
   rows <- list()
   for (cond in conditions) {
@@ -207,8 +228,7 @@ tps_make_contrasts <- function(design, endpoint = NULL,
   list(cmat = cmat, meta = meta)
 }
 
-.build_within_condition <- function(cells, conditions, times, within) {
-  levels_d <- cells$cell
+.build_within_condition <- function(cells, conditions, times, within, levels_d) {
   rows <- list()
   tt_sorted <- sort(times)
   pairs <- if (within == "consecutive") {
@@ -235,8 +255,7 @@ tps_make_contrasts <- function(design, endpoint = NULL,
   list(cmat = cmat, meta = meta)
 }
 
-.build_average_time <- function(cells, conditions, times) {
-  levels_d <- cells$cell
+.build_average_time <- function(cells, conditions, times, levels_d) {
   C <- length(conditions)
   rows <- list()
   for (tt in times) {
@@ -253,10 +272,9 @@ tps_make_contrasts <- function(design, endpoint = NULL,
   list(cmat = cmat, meta = meta)
 }
 
-.build_heterogeneity <- function(cells, conditions, times, ref) {
+.build_heterogeneity <- function(cells, conditions, times, ref, levels_d) {
   ## Full-rank: for each non-ref condition, for each time, mu_{c,t} - mu_{ref,t}.
   ## (C-1) * length(times) contrasts, rank = (C-1)*T.
-  levels_d <- cells$cell
   non_ref <- setdiff(conditions, ref)
   rows <- list()
   for (cond in non_ref) {
@@ -275,10 +293,9 @@ tps_make_contrasts <- function(design, endpoint = NULL,
   list(cmat = cmat, meta = meta)
 }
 
-.build_within_omnibus <- function(cells, conditions, times) {
+.build_within_omnibus <- function(cells, conditions, times, levels_d) {
   ## For each condition, all vs-baseline contrasts jointly -> omnibus F.
   ## We split the vs-baseline family by condition into per-condition blocks.
-  levels_d <- cells$cell
   rows <- list()
   meta_rows <- list()
   for (cond in conditions) {
@@ -297,8 +314,7 @@ tps_make_contrasts <- function(design, endpoint = NULL,
   list(cmat = cmat, meta = meta)
 }
 
-.build_endpoint <- function(cells, conditions, endpoint) {
-  levels_d <- cells$cell
+.build_endpoint <- function(cells, conditions, endpoint, levels_d) {
   rows <- list()
   for (cond in conditions) {
     cell <- paste(cond, endpoint, sep = "_")

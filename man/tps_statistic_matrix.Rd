@@ -26,6 +26,7 @@ Pivots a chosen statistic (moderated t by default) from a \code{tps_fit}
 into a matrix suitable for pathway-level aggregation (NET/REM/COH).
 }
 \examples{
+data(tps_example, package = "timeProtState")
 se <- tps_import(tps_example_abundance, tps_example_metadata)
 design <- tps_make_design(se)
 contrasts <- tps_make_contrasts(design, endpoint = 7)

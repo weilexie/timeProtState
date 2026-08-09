@@ -21,6 +21,7 @@ Produces a ggplot of cluster centroids (from
 \code{\link{tps_cluster_trajectories}}) or individual feature trajectories.
 }
 \examples{
+data(tps_example, package = "timeProtState")
 se <- tps_import(tps_example_abundance, tps_example_metadata)
 traj <- tps_trajectory_matrix(se)
 cl <- tps_cluster_trajectories(traj, method = "kmeans", k = 4, seed = 1)

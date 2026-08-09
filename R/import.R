@@ -8,7 +8,7 @@
 ##   - unique protein ids
 ##   - sample_id <-> colnames alignment
 ##   - required metadata columns present
-##   - time is sortable / coercible to numeric or ordered factor
+##   - time is finite numeric or coercible to numeric
 ##   - at least one baseline and >=2 non-baseline timepoints per design
 ##   - shared-baseline detection (all baselines share one timepoint)
 ##   - estimability per condition x time group (>=1 sample)
@@ -25,7 +25,7 @@
 #' Builds a \code{\link[SummarizedExperiment]{SummarizedExperiment}} from a
 #' protein-by-sample abundance matrix and sample metadata, enforcing the
 #' data contract required by the rest of the package: a shared baseline,
-#' sortable time, estimable condition-by-time groups, and aligned ids.
+#' numeric time, estimable condition-by-time groups, and aligned ids.
 #'
 #' Imputation is NOT performed at import (missing values are preserved).
 #' Missing values are preserved and surface naturally in downstream limma
@@ -45,6 +45,7 @@
 #'   \code{metadata(se)$timeProtState}.
 #'
 #' @examples
+#' data(tps_example, package = "timeProtState")
 #' se <- tps_import(
 #'   abundance = tps_example_abundance,
 #'   col_data  = tps_example_metadata,
@@ -55,7 +56,6 @@
 #' @export
 tps_import <- function(abundance, col_data, row_data = NULL,
                         assay_name = "log2_abundance", validate = TRUE) {
-  kalls <- as.list(match.call())
   arg_capture <- list(call = "tps_import", assay_name = assay_name,
                        timestamp = format(Sys.time(), "%Y-%m-%dT%H:%M:%S%z"))
   se <- .build_se(abundance, col_data, row_data, assay_name)
@@ -84,11 +84,32 @@ tps_import <- function(abundance, col_data, row_data = NULL,
                  class(abundance)[1L])
     }
   }
-  storage.mode(abundance) <- "double"
+  if (!is.numeric(abundance)) {
+    original_na <- is.na(abundance)
+    converted <- suppressWarnings(as.numeric(abundance))
+    converted <- matrix(converted, nrow = nrow(abundance), ncol = ncol(abundance),
+                        dimnames = dimnames(abundance))
+    introduced_na <- is.na(converted) & !original_na
+    if (any(introduced_na)) {
+      tps_abort("abundance contains non-numeric values that cannot be converted safely.")
+    }
+    abundance <- converted
+  } else {
+    storage.mode(abundance) <- "double"
+  }
+  if (nrow(abundance) == 0L || ncol(abundance) == 0L) {
+    tps_abort("abundance must have at least one feature and one sample.")
+  }
+  if (length(assay_name) != 1L || is.na(assay_name) || !nzchar(assay_name)) {
+    tps_abort("assay_name must be one non-empty string.")
+  }
 
   ## Protein ids.
   if (is.null(rownames(abundance))) {
     tps_abort("abundance must have unique row names (protein identifiers).")
+  }
+  if (anyNA(rownames(abundance)) || any(!nzchar(rownames(abundance)))) {
+    tps_abort("abundance row names must be non-missing, non-empty protein ids.")
   }
   dup <- duplicated(rownames(abundance))
   if (any(dup)) {
@@ -105,19 +126,28 @@ tps_import <- function(abundance, col_data, row_data = NULL,
     tps_abort("col_data is missing required column(s): %s.",
                paste(missing_cols, collapse = ", "))
   }
-  ## rownames of col_data must be sample ids, in col_data$sample_id order.
-  if (is.null(rownames(col_data))) {
-    if (!"sample_id" %in% names(col_data) ||
-        anyDuplicated(col_data$sample_id)) {
-      tps_abort("col_data has no row names and sample_id is not unique.")
-    }
+  if (anyNA(col_data$sample_id) || any(!nzchar(as.character(col_data$sample_id)))) {
+    tps_abort("col_data$sample_id must contain non-missing, non-empty ids.")
+  }
+  if (anyDuplicated(col_data$sample_id)) {
+    tps_abort("col_data$sample_id must be unique.")
+  }
+  ## Ordinary data.frames have automatic row names (1, 2, ...), not NULL.
+  ## Promote sample_id in that common input form so alignment works as documented.
+  if (.has_automatic_rownames(col_data)) {
     rownames(col_data) <- col_data$sample_id
+  }
+  if (anyDuplicated(rownames(col_data))) {
+    tps_abort("col_data row names must be unique sample ids.")
   }
 
   ## Align samples: colnames(abundance) <-> col_data row order.
   csamp <- colnames(abundance)
   if (is.null(csamp)) {
     tps_abort("abundance must have column names matching sample_id.")
+  }
+  if (anyNA(csamp) || any(!nzchar(csamp)) || anyDuplicated(csamp)) {
+    tps_abort("abundance column names must be unique, non-missing sample ids.")
   }
   unknown_samples <- setdiff(csamp, rownames(col_data))
   if (length(unknown_samples)) {
@@ -131,14 +161,14 @@ tps_import <- function(abundance, col_data, row_data = NULL,
   }
   col_data <- col_data[csamp, , drop = FALSE]
 
+  ## Coerce the baseline flag before any downstream grouping logic uses it.
+  col_data$is_baseline <- .as_logical_strict(col_data$is_baseline,
+                                              col_name = "is_baseline")
   ## Factor hygiene: condition -> factor (baseline kept as its own level).
   col_data$condition <- .as_condition_factor(col_data$condition,
                                               col_data$is_baseline)
-  ## time -> numeric or ordered factor, sortable.
+  ## Downstream contrast names and dynamic ordering require numeric time.
   col_data$time <- .as_time(col_data$time)
-  ## is_baseline -> logical.
-  col_data$is_baseline <- .as_logical_strict(col_data$is_baseline,
-                                              col_name = "is_baseline")
 
   ## row_data alignment.
   if (is.null(row_data)) {
@@ -149,12 +179,18 @@ tps_import <- function(abundance, col_data, row_data = NULL,
     if (!is.data.frame(row_data)) {
       tps_abort("row_data must be a data.frame or NULL.")
     }
-    if (is.null(rownames(row_data))) {
+    if (.has_automatic_rownames(row_data)) {
       if (nrow(row_data) == nrow(abundance)) {
         rownames(row_data) <- rownames(abundance)
       } else {
         tps_abort("row_data has no row names and length mismatches abundance.")
       }
+    }
+    if (anyDuplicated(rownames(row_data))) {
+      tps_abort("row_data row names must be unique feature ids.")
+    }
+    if (anyNA(rownames(row_data)) || any(!nzchar(rownames(row_data)))) {
+      tps_abort("row_data row names must be non-missing, non-empty feature ids.")
     }
     missing_prots <- setdiff(rownames(abundance), rownames(row_data))
     if (length(missing_prots)) {
@@ -176,6 +212,10 @@ tps_import <- function(abundance, col_data, row_data = NULL,
   se
 }
 
+.has_automatic_rownames <- function(x) {
+  .row_names_info(x, type = 1L) < 0L
+}
+
 ## ---- coercion helpers ------------------------------------------------------
 .as_condition_factor <- function(x, is_baseline) {
   if (is.factor(x)) return(droplevels(x))
@@ -184,29 +224,20 @@ tps_import <- function(abundance, col_data, row_data = NULL,
 }
 
 .as_time <- function(x) {
-  ## Prefer numeric; fall back to ordered factor only if non-coercible.
-  if (is.numeric(x)) return(x)
-  if (is.ordered(x)) return(x)
-  if (is.factor(x)) {
-    ## unordered factor -> coerce via levels to ordered if sortable.
-    lv <- levels(x)
-    num <- suppressWarnings(as.numeric(lv))
-    if (!anyNA(num)) return(as.numeric(as.character(x)))
-    return(factor(x, levels = lv, ordered = TRUE))
+  out <- if (is.numeric(x)) x else {
+    suppressWarnings(as.numeric(as.character(x)))
   }
-  if (is.character(x)) {
-    num <- suppressWarnings(as.numeric(x))
-    if (!anyNA(num)) return(num)
-    ## try to sort lexicographically as ordered factor.
-    ux <- unique(x)
-    return(factor(x, levels = ux[order(ux)], ordered = TRUE))
+  if (length(out) != length(x) || any(!is.finite(out))) {
+    tps_abort("time must be fully observed, finite numeric values or coercible to numeric.")
   }
-  tps_abort("time must be numeric, ordered factor, or coercible; got %s.",
-             class(x)[1L])
+  out
 }
 
 .as_logical_strict <- function(x, col_name) {
-  if (is.logical(x)) return(x)
+  if (is.logical(x)) {
+    if (anyNA(x)) tps_abort("column %s must not contain NA.", col_name)
+    return(x)
+  }
   if (is.character(x)) {
     ok <- tolower(x) %in% c("true","false","t","f","yes","no","1","0")
     if (!all(ok)) {
@@ -216,6 +247,11 @@ tps_import <- function(abundance, col_data, row_data = NULL,
     lx <- tolower(x) %in% c("true","t","yes","1")
     return(lx)
   }
-  if (is.numeric(x)) return(as.logical(x))
+  if (is.numeric(x)) {
+    if (anyNA(x) || any(!x %in% c(0, 1))) {
+      tps_abort("column %s numeric values must be only 0 or 1.", col_name)
+    }
+    return(as.logical(x))
+  }
   tps_abort("column %s must be logical.", col_name)
 }

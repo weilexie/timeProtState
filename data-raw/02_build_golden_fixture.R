@@ -13,7 +13,14 @@
 
 suppressPackageStartupMessages({ library(limma); library(SummarizedExperiment) })
 
-PROJ <- "C:/Users/11377/Desktop/Msm_dormancy/Msm_dormancy_proteomics"
+workspace_root <- normalizePath(
+  Sys.getenv("TPS_WORKSPACE", unset = getwd()), mustWork = TRUE
+)
+PROJ <- normalizePath(Sys.getenv(
+  "TPS_DORMANCY_PROJECT",
+  unset = file.path(dirname(workspace_root), "Msm_dormancy",
+                    "Msm_dormancy_proteomics")
+), mustWork = TRUE)
 step5 <- read.csv(file.path(PROJ, "01_data/02_processed_data/step5_imputed_Perseus_MNAR.csv"),
                   stringsAsFactors = FALSE, check.names = FALSE)
 meta <- read.csv(file.path(PROJ, "01_data/02_processed_data/Metadata.csv"),

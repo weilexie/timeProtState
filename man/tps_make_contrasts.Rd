@@ -26,8 +26,10 @@ non-baseline time is used.}
 
 \item{reference_condition}{character; the condition used as reference for
 the heterogeneity family. If \code{NULL}, the first non-baseline
-condition (alphabetical) is used. Heterogeneity F-statistics are
-reference-invariant.}
+condition (alphabetical) is used. The heterogeneity contrast subspace is
+reference-invariant. With feature-level missing values, numerical limma
+F-statistics can differ slightly because \code{contrasts.fit} uses an
+approximate covariance transformation.}
 
 \item{include_average_time}{logical; include the average-time family (C).}
 
@@ -48,6 +50,7 @@ heterogeneity, within-condition omnibus, and endpoint contrasts. Each family
 is returned with its effective rank.
 }
 \examples{
+data(tps_example, package = "timeProtState")
 se <- tps_import(tps_example_abundance, tps_example_metadata)
 design <- tps_make_design(se)
 contrasts <- tps_make_contrasts(design, endpoint = 7)

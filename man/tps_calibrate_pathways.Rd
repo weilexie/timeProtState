@@ -19,7 +19,8 @@ tps_calibrate_pathways(
 \code{\link{tps_pathway_scores}}.}
 
 \item{abundance}{numeric vector of per-feature abundance (e.g. AveExpr from
-limma), aligned to \code{scores$universe}. Required for
+limma), aligned to \code{scores$feature_ids}. A named vector is reordered
+when its names match either feature ids or mapped pathway ids. Required for
 \code{abundance_stratified} mode; ignored for \code{unstratified}.}
 
 \item{n_perm}{integer; number of permutations (default 1000; use 5000+ for
@@ -43,15 +44,16 @@ a list of class \code{tps_pathway_calibrated} extending the input
 }
 \description{
 Applies a size-matched permutation null to a \code{tps_pathway_scores}
-object and computes empirical p-values for NET (two-sided) and REM
-(upper-tail), Benjamini-Hochberg q-values, and null mean/SD per pathway.
+object and computes empirical p-values for NET (two-sided around its
+permutation-null mean) and REM (upper-tail), Benjamini-Hochberg q-values,
+and null mean/SD per pathway.
 }
 \details{
-The default mode is \code{"abundance_stratified"} (validated in the spike
-as the best-calibrated null): proteins are binned into \code{n_bins}
-equal-frequency abundance quantiles and permuted within each bin, keeping
-pathway correlations via a shared permutation structure while controlling
-for abundance confounding.
+The default mode is \code{"abundance_stratified"}: proteins are binned into
+\code{n_bins} equal-frequency abundance quantiles and permuted within each
+bin. One shared permutation index retains overlap among pathway definitions;
+stratification reduces differences in abundance distributions but does not
+preserve within-pathway protein covariance.
 }
 \examples{
 data(tps_example, package = "timeProtState")

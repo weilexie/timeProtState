@@ -57,6 +57,7 @@ Pathways with fewer than \code{min_size} observed members (intersected with
 the analysis universe) are dropped.
 }
 \examples{
+data(tps_example, package = "timeProtState")
 se <- tps_import(tps_example_abundance, tps_example_metadata,
                  tps_example_annotation)
 design <- tps_make_design(se)

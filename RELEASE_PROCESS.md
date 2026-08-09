@@ -1,58 +1,66 @@
-# Release Process
+# Release process
 
-This document describes the release workflow for `timeProtState` to support
-Zenodo DOI minting and Bioconductor submission.
+This checklist covers the `timeProtState` 0.99.x submission candidate. Do not
+publish placeholder repository URLs, issue trackers, ORCIDs, or DOIs.
+
+## Local quality gate
+
+Run with R >= 4.5 and a working Pandoc on `PATH`:
+
+```r
+devtools::document("04_package/timeProtState")
+devtools::test("04_package/timeProtState")
+devtools::build("04_package/timeProtState", vignettes = TRUE)
+```
+
+Then check the source tarball:
+
+```powershell
+R CMD check --as-cran --no-manual timeProtState_0.99.0.tar.gz
+Rscript -e "BiocCheck::BiocCheck('timeProtState_0.99.0.tar.gz')"
+```
+
+Verified on 2026-08-09:
+
+- tests: 359 success expectations, 64 expected warnings, no failures/errors;
+- `R CMD check`: 0 ERROR, 0 WARNING, 1 NOTE (`New submission`);
+- `BiocCheck 1.44.2`: 1 ERROR, 0 WARNING, 8 NOTES. The error is external:
+  the maintainer email is not registered on the Bioconductor Support Site.
+
+The check is not submission-clean until the maintainer registers
+`weile.xie@outlook.com` on the Support Site. The author should also subscribe to
+Bioc-devel. Add an ORCID or `fnd` role only when the real metadata are supplied.
+
+## Validation gate
+
+Run the authoritative sequence documented in
+`05_validation/02_timeProtState-paper/README.md`. Confirm that:
+
+- the named endpoints remain Acid day 7 and PXD006262 WT 240 min;
+- comparison methods use the same pathway mappings and correction contract;
+- the generated CSV files match the numbers reported in the manuscript;
+- Figure 1 is regenerated from current CSV files and visually inspected;
+- no discovery-count comparison is described as sensitivity, specificity, or
+  false-positive performance without pathway-level ground truth.
+
+## Public release and archive
+
+1. Create the public repository and issue tracker.
+2. Add the real repository and issue URLs to `DESCRIPTION`.
+3. Commit a source tarball that has passed the local quality gate.
+4. Create the version tag and public release.
+5. Archive that release in Zenodo and obtain the DOI.
+6. Synchronize the DOI and release metadata across `inst/CITATION`,
+   `CITATION.cff`, README, and the manuscript.
+7. Rebuild and repeat both checks after metadata changes.
+
+Follow the current Bioconductor submission instructions at submission time;
+do not assume that a historical Git remote or review workflow is still valid.
 
 ## Version scheme
 
+```text
+0.99.x  Bioconductor review candidates
+1.0.0   First accepted release
+1.0.x   Release-branch fixes
 ```
-0.99.0   Bioconductor submission candidate (devel)
-1.0.0    First Bioconductor release (after review acceptance)
-1.0.x    Patch releases (review fixes)
-```
-
-## Pre-release checklist
-
-1. **Tests**: `devtools::test()` → 0 failures (currently 231/231 PASS).
-2. **R CMD check**: `R CMD check --as-cran` → 0 ERROR, 0 WARNING (vignette
-   compilation requires pandoc; CI provides it). Currently 2 WARNINGs are
-   vignette-HTML-only (pandoc environment) and 1 NOTE (e1071 library call,
-   documented).
-3. **BiocCheck**: `BiocCheck::BiocCheck(".")` — run on Linux CI.
-4. **Vignettes**: both build with pandoc installed.
-5. **Documentation**: all exported functions have runnable examples.
-6. **LICENSE**: Artistic-2.0, no commercial restrictions.
-
-## Git release + Zenodo DOI
-
-1. Tag the release:
-   ```bash
-   git tag -a v0.99.0 -m "Bioconductor submission candidate"
-   git push origin v0.99.0
-   ```
-2. On GitHub: create a Release from the tag. Include:
-   - source tarball (`timeProtState_0.99.0.tar.gz`)
-   - NEWS.md excerpt
-   - checksums
-3. Zenodo: enable GitHub integration (Settings → Webhooks → Zenodo). Pushing
-   the tag triggers Zenodo to mint a DOI automatically. The `.zenodo.json`
-   file controls metadata.
-4. Record the DOI in:
-   - `inst/CITATION`
-   - `CITATION.cff`
-   - README.md
-   - manuscript Data Availability section
-
-## Bioconductor submission
-
-1. Ensure package is on Bioconductor devel (R >= 4.5).
-2. `git clone git@git.bioconductor.org:packages/timeProtState`
-3. Push to `devel` branch.
-4. Track build status on Bioconductor single-package builder.
-5. Respond to reviewer comments in the Bioc-devel tracker.
-
-## Reproducibility
-
-The companion repository `timeProtState-paper` pins the exact versions used
-for manuscript figures via `renv.lock` and provides `make reproduce` or
-`targets::tar_make()` entry points.

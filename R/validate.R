@@ -34,6 +34,7 @@
 #'   \code{design} (a summary of the experimental design), and \code{ok}.
 #'
 #' @examples
+#' data(tps_example, package = "timeProtState")
 #' se <- tps_import(tps_example_abundance, tps_example_metadata)
 #' report <- tps_validate(se)
 #' report$ok
@@ -45,8 +46,9 @@ tps_validate <- function(se, action = c("report", "abort", "warn")) {
   if (!inherits(se, "SummarizedExperiment")) {
     tps_abort("se must be a SummarizedExperiment, got %s.", class(se)[1L])
   }
-  errors <- character(0)
-  warnings <- character(0)
+  issues <- new.env(parent = emptyenv())
+  issues$errors <- character(0)
+  issues$warnings <- character(0)
   ## messages may be supplied as a paste0-able template split across several
   ## string args followed by sprintf args. We fold consecutive character
   ## fragments into one template, then sprintf over the remaining args.
@@ -62,11 +64,14 @@ tps_validate <- function(se, action = c("report", "abort", "warn")) {
     vals <- if (n_tmpl < length(args)) args[(n_tmpl + 1L):length(args)] else list()
     if (length(vals)) do.call(sprintf, c(list(tmpl), vals)) else tmpl
   }
-  add_err  <- function(...) errors   <<- c(errors, fold_msg(...))
-  add_warn <- function(...) warnings <<- c(warnings, fold_msg(...))
+  add_err <- function(...) {
+    issues$errors <- c(issues$errors, fold_msg(...))
+  }
+  add_warn <- function(...) {
+    issues$warnings <- c(issues$warnings, fold_msg(...))
+  }
 
   cd <- as.data.frame(SummarizedExperiment::colData(se))
-  rd <- as.data.frame(SummarizedExperiment::rowData(se))
   assay_name <- S4Vectors::metadata(se)$timeProtState$assay_name
   if (is.null(assay_name)) assay_name <- "log2_abundance"
   expr <- SummarizedExperiment::assay(se, assay_name)
@@ -81,6 +86,9 @@ tps_validate <- function(se, action = c("report", "abort", "warn")) {
   ## ---- check 2: sample_id uniqueness and alignment -----------------------
   if ("sample_id" %in% names(cd)) {
     sid <- cd$sample_id
+    if (anyNA(sid) || any(!nzchar(as.character(sid)))) {
+      add_err("sample_id must contain non-missing, non-empty values.")
+    }
     if (anyDuplicated(sid)) {
       dups <- unique(sid[duplicated(sid)])
       add_err("sample_id has %d duplicated value(s): %s.",
@@ -88,35 +96,39 @@ tps_validate <- function(se, action = c("report", "abort", "warn")) {
     }
     colnames_expr <- colnames(expr)
     if (!identical(as.character(sid), colnames_expr)) {
-      misaligned <- which(as.character(sid) != colnames_expr)
+      misaligned <- which(is.na(sid) | as.character(sid) != colnames_expr)
       add_err("sample_id and assay colnames disagree at positions: %s.",
               paste(head(misaligned, 5L), collapse = ", "))
     }
   }
 
   ## ---- check 3: is_baseline present and at least one TRUE ----------------
+  baseline_flag_ok <- FALSE
   if ("is_baseline" %in% names(cd)) {
     if (!is.logical(cd$is_baseline)) {
       add_err("is_baseline must be logical; got %s.", class(cd$is_baseline)[1L])
+    } else if (anyNA(cd$is_baseline)) {
+      add_err("is_baseline must not contain NA.")
     } else if (!any(cd$is_baseline, na.rm = TRUE)) {
       add_err("No baseline samples found (is_baseline all FALSE/NA).")
+    } else {
+      baseline_flag_ok <- TRUE
     }
   }
 
-  ## ---- check 4: time sortable & >=2 non-baseline timepoints ---------------
+  if ("condition" %in% names(cd) &&
+      (anyNA(cd$condition) || any(!nzchar(as.character(cd$condition))))) {
+    add_err("condition must contain non-missing, non-empty labels.")
+  }
+
+  ## ---- check 4: finite numeric time & >=2 non-baseline timepoints ----------
   design_summary <- list()
-  if ("time" %in% names(cd) && "is_baseline" %in% names(cd)) {
+  if ("time" %in% names(cd) && baseline_flag_ok) {
     tv <- cd$time
-    if (is.numeric(tv)) {
-      if (anyNA(tv)) {
-        add_err("time has %d NA value(s); time must be fully observed.",
-                sum(is.na(tv)))
-      }
+    if (is.numeric(tv) && all(is.finite(tv))) {
       time_levels <- sort(unique(tv))
-    } else if (is.ordered(tv)) {
-      time_levels <- levels(droplevels(tv))
     } else {
-      add_err("time must be numeric or ordered factor; got %s.", class(tv)[1L])
+      add_err("time must contain fully observed, finite numeric values.")
       time_levels <- character(0)
     }
     baseline_times <- unique(tv[cd$is_baseline])
@@ -131,28 +143,56 @@ tps_validate <- function(se, action = c("report", "abort", "warn")) {
     design_summary$non_baseline_times <- non_baseline_times
 
     ## ---- check 5: SHARED BASELINE detection (the novelty) ----------------
-    ## In a shared-baseline design, all baseline rows share exactly one time.
-    if (length(baseline_times) > 1L) {
-      add_warn("Baseline spans %s distinct time values (%s). This is NOT a ",
-               "shared-baseline design; tps_make_design will fall back to a ",
-               "general group-means model.",
-               length(baseline_times),
-               paste(head(as.character(baseline_times), 5L), collapse = ", "))
-      design_summary$shared_baseline <- FALSE
-    } else {
-      design_summary$shared_baseline <- TRUE
+    ## A shared baseline is one physical baseline group: one time and one
+    ## condition label. Equal time alone is insufficient because condition-
+    ## specific controls measured at t0 must not be pooled.
+    if ("condition" %in% names(cd)) {
+      binfo <- .baseline_info(cd$condition, tv, cd$is_baseline)
+      design_summary$shared_baseline <- binfo$shared_baseline
+      design_summary$baseline_conditions <- binfo$baseline_conditions
+      if (!binfo$shared_baseline) {
+        add_warn(paste0(
+          "Baseline rows are NOT a valid shared-baseline group (times: ",
+          paste(as.character(binfo$baseline_time), collapse = ", "),
+          "; conditions: ",
+          paste(binfo$baseline_conditions, collapse = ", "),
+          "). Shared-baseline contrasts are unavailable."
+        ))
+      }
+    }
+
+    ## All non-baseline conditions must share the same time grid because the
+    ## contrast families and pathway dynamics compare condition x time cells.
+    if ("condition" %in% names(cd)) {
+      nb <- !cd$is_baseline
+      conditions <- sort(unique(as.character(cd$condition[nb])))
+      expected <- expand.grid(
+        condition = conditions,
+        time = sort(unique(tv[nb])),
+        stringsAsFactors = FALSE
+      )
+      expected_key <- paste(expected$condition, expected$time, sep = "\r")
+      observed_key <- unique(paste(as.character(cd$condition[nb]),
+                                   as.character(tv[nb]), sep = "\r"))
+      missing_key <- expected_key[!expected_key %in% observed_key]
+      if (length(missing_key)) {
+        add_err("Incomplete condition-by-time grid; missing cell(s): %s.",
+                paste(head(gsub("\r", "@", missing_key, fixed = TRUE), 8L),
+                      collapse = ", "))
+      }
     }
   }
 
   ## ---- check 6: condition-by-time group estimability ---------------------
-  if (all(c("condition","time","is_baseline") %in% names(cd))) {
+  if (all(c("condition", "time") %in% names(cd)) && baseline_flag_ok &&
+      is.numeric(cd$time) && all(is.finite(cd$time)) &&
+      !anyNA(cd$condition)) {
     cd$.group <- .compose_group(cd$condition, cd$time, cd$is_baseline)
     grp_tab <- table(cd$.group)
     design_summary$groups <- as.data.frame.table(grp_tab,
                                                   responseName = "n_samples",
                                                   stringsAsFactors = FALSE)
     names(design_summary$groups)[1L] <- "group"
-    empty_groups <- character(0)  ## none can be empty by construction
     small_groups <- design_summary$groups$group[design_summary$groups$n_samples < 2L]
     if (length(small_groups)) {
       add_warn(paste0("Group(s) with <2 samples (low-replicate, limited power): ",
@@ -171,6 +211,10 @@ tps_validate <- function(se, action = c("report", "abort", "warn")) {
                     paste(head(all_na, 5L), collapse = ", "), "."))
   }
   design_summary$n_all_na_proteins <- length(all_na)
+  if (any(is.infinite(expr))) {
+    add_err("assay contains %d infinite value(s); replace them with NA or finite values.",
+            sum(is.infinite(expr)))
+  }
 
   ## ---- check 8: protein id uniqueness ------------------------------------
   if (anyDuplicated(rownames(expr))) {
@@ -190,6 +234,8 @@ tps_validate <- function(se, action = c("report", "abort", "warn")) {
   }
 
   ## ---- assemble report ---------------------------------------------------
+  errors <- issues$errors
+  warnings <- issues$warnings
   report <- list(
     errors = errors,
     warnings = warnings,
@@ -214,11 +260,9 @@ tps_validate <- function(se, action = c("report", "abort", "warn")) {
 ## compose a group label from condition/time/baseline. Baseline rows all
 ## collapse to "baseline" so they form a single shared cell.
 .compose_group <- function(condition, time, is_baseline) {
-  out <- character(length(condition))
-  out[is_baseline] <- "baseline"
-  nb <- !is_baseline
-  out[nb] <- paste(as.character(condition[nb]),
-                    as.character(time[nb]), sep = "_")
+  binfo <- .baseline_info(condition, time, is_baseline)
+  out <- paste(as.character(condition), as.character(time), sep = "_")
+  if (binfo$shared_baseline) out[is_baseline] <- "baseline"
   out
 }
 

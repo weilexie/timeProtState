@@ -8,7 +8,6 @@ authors:
 version: "0.99.0"
 date-released: "2026-08-08"
 license: Artistic-2.0
-repository-code: "https://github.com/weilexie/timeProtState"
 keywords:
   - proteomics
   - time-course

@@ -1,8 +1,20 @@
 options(testthat.use_colours = FALSE)
 `%||%` <- function(a, b) if (is.null(a)) b else a
-suppressMessages({ library(testthat); library(timeProtState) })
+suppressMessages(library(testthat))
 
-pkg <- "C:/Users/11377/Desktop/proteomics pipeline R package/04_package/timeProtState"
+workspace_root <- normalizePath(
+  Sys.getenv("TPS_WORKSPACE", unset = getwd()), mustWork = TRUE
+)
+pkg <- file.path(workspace_root, "04_package", "timeProtState")
+if (!file.exists(file.path(pkg, "DESCRIPTION")) &&
+    file.exists(file.path(workspace_root, "DESCRIPTION"))) {
+  pkg <- workspace_root
+}
+if (!file.exists(file.path(pkg, "DESCRIPTION"))) {
+  stop("Run from the workspace/package root or set TPS_WORKSPACE.")
+}
+pkgload::load_all(pkg, quiet = TRUE)
+data("tps_example", package = "timeProtState", envir = globalenv())
 files <- list.files(file.path(pkg, "tests", "testthat"),
                     pattern = "^test-.*\\.R$", full.names = TRUE)
 

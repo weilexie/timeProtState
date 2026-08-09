@@ -21,18 +21,12 @@
   ## In shared-baseline design, all is_baseline rows -> one "baseline" group
   ## at the shared baseline time. Non-baseline rows -> "<condition>_<time>".
   bl <- cd$is_baseline
-  group <- character(nrow(cd))
-  if (any(bl)) {
-    bl_time <- unique(cd$time[bl])
-    group[bl] <- "baseline"
-  } else {
-    bl_time <- NA
-  }
-  nb <- !bl
-  group[nb] <- paste(as.character(cd$condition[nb]),
-                      as.character(cd$time[nb]), sep = "_")
-  list(group = factor(group), baseline_time = bl_time,
-       shared_baseline = length(bl_time) == 1L && !anyNA(bl_time))
+  binfo <- .baseline_info(cd$condition, cd$time, bl)
+  group <- paste(as.character(cd$condition), as.character(cd$time), sep = "_")
+  if (binfo$shared_baseline) group[bl] <- "baseline"
+  list(group = factor(group), baseline_time = binfo$baseline_time,
+       baseline_conditions = binfo$baseline_conditions,
+       shared_baseline = binfo$shared_baseline)
 }
 
 ## ---- tps_make_design -------------------------------------------------------
@@ -59,6 +53,7 @@
 #'   \item{provenance}{provenance entry.}
 #'
 #' @examples
+#' data(tps_example, package = "timeProtState")
 #' se <- tps_import(tps_example_abundance, tps_example_metadata)
 #' design <- tps_make_design(se, condition = "condition", time = "time",
 #'                            is_baseline = "is_baseline")
@@ -75,11 +70,31 @@ tps_make_design <- function(se, condition = "condition", time = "time",
   if (!inherits(se, "SummarizedExperiment")) {
     tps_abort("se must be a SummarizedExperiment, got %s.", class(se)[1L])
   }
+  design_cols <- c(condition, time, is_baseline)
+  if (!is.character(design_cols) || anyNA(design_cols) ||
+      any(!nzchar(design_cols)) || length(design_cols) != 3L) {
+    tps_abort("condition, time, and is_baseline must be single column names.")
+  }
+  if (!is.null(batch) &&
+      (!is.character(batch) || length(batch) != 1L ||
+       is.na(batch) || !nzchar(batch))) {
+    tps_abort("batch must be NULL or one non-empty column name.")
+  }
   cd <- as.data.frame(SummarizedExperiment::colData(se))
   for (col in c(condition, time, is_baseline)) {
     if (!col %in% names(cd)) {
       tps_abort("colData has no column '%s'.", col)
     }
+  }
+  if (!is.logical(cd[[is_baseline]]) || anyNA(cd[[is_baseline]])) {
+    tps_abort("is_baseline column must be fully observed logical values.")
+  }
+  if (!is.numeric(cd[[time]]) || any(!is.finite(cd[[time]]))) {
+    tps_abort("time column must contain finite numeric values.")
+  }
+  if (anyNA(cd[[condition]]) ||
+      any(!nzchar(as.character(cd[[condition]])))) {
+    tps_abort("condition column must contain non-empty, non-missing labels.")
   }
   cd$.condition <- cd[[condition]]
   cd$.time <- cd[[time]]
@@ -95,19 +110,20 @@ tps_make_design <- function(se, condition = "condition", time = "time",
   } else {
     non_bl <- group_levels
   }
-  non_bl_ord <- non_bl[order(.natural_sort_key(non_bl))]
+  non_bl_ord <- non_bl[.natural_sort_order(non_bl)]
   group_levels <- c(if (any(is_baseline_level)) "baseline", non_bl_ord)
   group <- factor(as.character(group), levels = group_levels)
 
   ## design matrix ~0 + group
   design_matrix <- stats::model.matrix(~ 0 + group)
   colnames(design_matrix) <- sub("^group", "", colnames(design_matrix))
+  rownames(design_matrix) <- rownames(cd)
 
   ## optional batch covariate
   if (!is.null(batch)) {
     if (!batch %in% names(cd)) tps_abort("colData has no batch column '%s'.", batch)
-    bcol <- cd[[batch]]
-    if (!is.factor(bcol)) bcol <- factor(bcol)
+    bcol <- droplevels(factor(cd[[batch]]))
+    if (anyNA(bcol)) tps_abort("batch column '%s' contains NA.", batch)
     bmat <- stats::model.matrix(~ 0 + bcol)[, -1L, drop = FALSE]
     colnames(bmat) <- paste0("batch", levels(droplevels(bcol))[-1L])
     design_matrix <- cbind(design_matrix, bmat)
@@ -138,6 +154,7 @@ tps_make_design <- function(se, condition = "condition", time = "time",
       estimability = gt[, c("group","n_samples","estimable")],
       rank_audit = rank_audit,
       baseline = list(baseline_time = ginfo$baseline_time,
+                       baseline_conditions = ginfo$baseline_conditions,
                        shared_baseline = ginfo$shared_baseline),
       condition = condition, time = time, is_baseline = is_baseline,
       group_levels = group_levels,
@@ -150,8 +167,8 @@ tps_make_design <- function(se, condition = "condition", time = "time",
 
 ## natural sort key: extract condition and numeric time from "<condition>_<time>"
 ## Uses regex (not strsplit) to handle condition names containing underscores
-.natural_sort_key <- function(x) {
-  cond <- sub("_[0-9.]+$", "", x)
+.natural_sort_order <- function(x) {
+  cond <- sub("_[^_]+$", "", x)
   tt <- suppressWarnings(as.numeric(sub("^.*_", "", x)))
   order(cond, tt)
 }

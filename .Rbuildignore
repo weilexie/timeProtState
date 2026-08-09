@@ -8,3 +8,8 @@
 ^RELEASE_PROCESS\.md$
 ^CITATION\.cff$
 ^\.zenodo\.json$
+^CODE_OF_CONDUCT\.md$
+^README\.Rmd$
+^_run_tests\.R$
+^README\.html$
+^.*\.tar\.gz$

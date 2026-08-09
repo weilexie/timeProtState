@@ -35,6 +35,7 @@
 #'   \item{provenance}{provenance entry.}
 #'
 #' @examples
+#' data(tps_example, package = "timeProtState")
 #' se <- tps_import(tps_example_abundance, tps_example_metadata)
 #' design <- tps_make_design(se)
 #' contrasts <- tps_make_contrasts(design, endpoint = 7)
@@ -55,9 +56,24 @@ tps_fit <- function(se, design, contrasts, assay_name = NULL,
   if (!inherits(contrasts, "tps_contrasts")) {
     tps_abort("contrasts must be a tps_contrasts object.")
   }
+  if (!isTRUE(design$rank_audit$full_rank)) {
+    tps_abort("design matrix is rank-deficient; resolve confounded cells/batches before fitting.")
+  }
+  if (length(trend) != 1L || is.na(trend) || !is.logical(trend) ||
+      length(robust) != 1L || is.na(robust) || !is.logical(robust)) {
+    tps_abort("trend and robust must each be one non-missing logical value.")
+  }
   if (is.null(assay_name)) {
     assay_name <- S4Vectors::metadata(se)$timeProtState$assay_name
     if (is.null(assay_name)) assay_name <- "log2_abundance"
+  }
+  if (!is.character(assay_name) || length(assay_name) != 1L ||
+      is.na(assay_name) ||
+      !assay_name %in% SummarizedExperiment::assayNames(se)) {
+    tps_abort("assay_name must identify one assay present in se.")
+  }
+  if (!identical(contrasts$design_levels, colnames(design$design_matrix))) {
+    tps_abort("contrasts were not built from the supplied design matrix.")
   }
   expr <- SummarizedExperiment::assay(se, assay_name)
 
@@ -65,6 +81,9 @@ tps_fit <- function(se, design, contrasts, assay_name = NULL,
   if (ncol(expr) != nrow(design$design_matrix)) {
     tps_abort("expr columns (%d) != design rows (%d).",
               ncol(expr), nrow(design$design_matrix))
+  }
+  if (!identical(colnames(expr), rownames(design$design_matrix))) {
+    tps_abort("assay columns and design rows are not in identical sample order.")
   }
 
   ## Fit with limma. lmFit handles NAs natively (DECISIONS D3: no imputation).
@@ -76,6 +95,10 @@ tps_fit <- function(se, design, contrasts, assay_name = NULL,
   for (fn in names(contrasts$families)) {
     cm <- contrasts$families[[fn]]
     if (is.null(cm) || length(cm) == 0L) next
+    if (nrow(cm) != ncol(design$design_matrix)) {
+      tps_abort("contrast family '%s' has %d rows but design has %d columns.",
+                fn, nrow(cm), ncol(design$design_matrix))
+    }
     test_kind <- unique(contrasts$family_meta[[fn]]$test)
     fc <- limma::contrasts.fit(fit0, cm)
     fc <- limma::eBayes(fc, trend = trend, robust = robust)
@@ -125,22 +148,36 @@ tps_fit <- function(se, design, contrasts, assay_name = NULL,
     }
     do.call(rbind, rows)
   } else if (test_kind == "F_omnibus") {
-    ## Omnibus F-test over the whole family.
-    k <- ncol(fc$coefficients)
-    tt <- limma::topTable(fc, coef = seq_len(k), number = Inf, sort.by = "none")
-    data.frame(
-      feature_id = rownames(tt),
-      family = family_name,
-      contrast = sprintf("%s_omnibus", family_name),
-      test = "F_omnibus",
-      logFC = NA_real_,
-      AveExpr = tt$AveExpr,
-      t = NA_real_,
-      F = tt$F,
-      P.Value = tt$P.Value,
-      adj.P.Val = tt$adj.P.Val,
-      B = NA_real_,
-      stringsAsFactors = FALSE)
+    meta <- contrasts$family_meta[[family_name]]
+    blocks <- if ("condition" %in% names(meta)) {
+      split(seq_len(ncol(fc$coefficients)), meta$condition)
+    } else {
+      list(omnibus = seq_len(ncol(fc$coefficients)))
+    }
+    rows <- lapply(names(blocks), function(block) {
+      idx <- blocks[[block]]
+      tt <- limma::topTable(fc, coef = idx, number = Inf, sort.by = "none")
+      label <- if (identical(block, "omnibus")) {
+        sprintf("%s_omnibus", family_name)
+      } else {
+        sprintf("%s_%s", family_name, block)
+      }
+      data.frame(
+        feature_id = rownames(tt),
+        family = family_name,
+        contrast = label,
+        test = "F_omnibus",
+        logFC = NA_real_,
+        AveExpr = tt$AveExpr,
+        t = NA_real_,
+        F = tt$F,
+        P.Value = tt$P.Value,
+        adj.P.Val = tt$adj.P.Val,
+        B = NA_real_,
+        stringsAsFactors = FALSE
+      )
+    })
+    do.call(rbind, rows)
   } else {
     tps_abort("unknown test_kind '%s'; expected 't' or 'F_omnibus'.", test_kind)
   }
@@ -158,6 +195,7 @@ tps_fit <- function(se, design, contrasts, assay_name = NULL,
 #' @return a data.frame.
 #'
 #' @examples
+#' data(tps_example, package = "timeProtState")
 #' se <- tps_import(tps_example_abundance, tps_example_metadata)
 #' design <- tps_make_design(se)
 #' contrasts <- tps_make_contrasts(design, endpoint = 7)
@@ -167,6 +205,14 @@ tps_fit <- function(se, design, contrasts, assay_name = NULL,
 #' @export
 tps_results <- function(fit, family = NULL, contrast = NULL) {
   if (!inherits(fit, "tps_fit")) tps_abort("fit must be a tps_fit object.")
+  for (arg in list(family = family, contrast = contrast)) {
+    value <- arg[[1L]]
+    if (!is.null(value) &&
+        (!is.character(value) || length(value) != 1L ||
+         is.na(value) || !nzchar(value))) {
+      tps_abort("family and contrast filters must be NULL or one non-empty name.")
+    }
+  }
   d <- fit$statistics
   if (!is.null(family)) d <- d[d$family == family, , drop = FALSE]
   if (!is.null(contrast)) d <- d[d$contrast == contrast, , drop = FALSE]
@@ -186,6 +232,7 @@ tps_results <- function(fit, family = NULL, contrast = NULL) {
 #' @return a numeric matrix (features x contrasts).
 #'
 #' @examples
+#' data(tps_example, package = "timeProtState")
 #' se <- tps_import(tps_example_abundance, tps_example_metadata)
 #' design <- tps_make_design(se)
 #' contrasts <- tps_make_contrasts(design, endpoint = 7)
@@ -215,7 +262,6 @@ tps_statistic_matrix <- function(fit, type = c("moderated_t","logFC","signed_log
   m <- matrix(NA_real_, nrow = length(feat), ncol = length(ctr),
               dimnames = list(feat, ctr))
   m[cbind(match(d$feature_id, feat), match(d$contrast, ctr))] <- val_col
-  m[is.na(m)] <- 0
   m
 }
 

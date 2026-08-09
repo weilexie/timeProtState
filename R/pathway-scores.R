@@ -18,13 +18,26 @@
 .build_membership <- function(term2gene, universe, min_size) {
   ## universe: character vector of feature ids that appear in the statistic
   ## matrix (rownames). term2gene: data.frame with columns term, gene.
-  if (!all(c("term","gene") %in% names(term2gene))) {
+  if (!is.data.frame(term2gene) ||
+      !all(c("term", "gene") %in% names(term2gene))) {
     tps_abort("term2gene must have columns 'term' and 'gene'.")
+  }
+  term2gene <- unique(data.frame(
+    term = as.character(term2gene$term),
+    gene = as.character(term2gene$gene),
+    stringsAsFactors = FALSE
+  ))
+  valid <- !is.na(term2gene$term) & nzchar(term2gene$term) &
+    !is.na(term2gene$gene) & nzchar(term2gene$gene)
+  term2gene <- term2gene[valid, , drop = FALSE]
+  if (nrow(term2gene) == 0L) {
+    tps_abort("term2gene has no non-missing term-gene mappings.")
   }
   pathways <- unique(term2gene$term)
   n_path <- length(pathways)
   n_prot <- length(universe)
   M <- Matrix::sparseMatrix(i = integer(0), j = integer(0),
+                             x = numeric(0),
                              dims = c(n_path, n_prot),
                              dimnames = list(pathways, universe))
   observed_size <- integer(n_path)
@@ -82,6 +95,7 @@
 #'   \item{provenance}{provenance entry.}
 #'
 #' @examples
+#' data(tps_example, package = "timeProtState")
 #' se <- tps_import(tps_example_abundance, tps_example_metadata,
 #'                  tps_example_annotation)
 #' design <- tps_make_design(se)
@@ -100,12 +114,24 @@ tps_pathway_scores <- function(fit, term2gene, type = "moderated_t",
                        min_coverage = min_coverage,
                        timestamp = format(Sys.time(), "%Y-%m-%dT%H:%M:%S%z"))
   eps <- 1e-12
-  if (min_size < 1L) {
-    tps_abort("min_size must be >= 1 (got %d); pathways with 0 members would ",
-              "cause division-by-zero in NET/REM scores.", min_size)
+  if (!is.numeric(min_size) || length(min_size) != 1L || is.na(min_size) ||
+      !is.finite(min_size) || min_size < 1L ||
+      min_size != as.integer(min_size)) {
+    tps_abort("min_size must be one positive integer.")
+  }
+  if (!is.numeric(min_coverage) || length(min_coverage) != 1L ||
+      is.na(min_coverage) || !is.finite(min_coverage) ||
+      min_coverage < 0 || min_coverage > 1) {
+    tps_abort("min_coverage must be in [0,1].")
+  }
+  if (!is.null(id_col) &&
+      (!is.character(id_col) || length(id_col) != 1L ||
+       is.na(id_col) || !nzchar(id_col))) {
+    tps_abort("id_col must be NULL or one non-empty column name.")
   }
 
   ## obtain statistic matrix
+  pathway_ids <- NULL
   if (inherits(fit, "tps_fit")) {
     stat_mat <- tps_statistic_matrix(fit, type = type, family = family)
     ## if id_col given, remap rownames via the annotation carried by the fit
@@ -121,9 +147,18 @@ tps_pathway_scores <- function(fit, term2gene, type = "moderated_t",
       }
       ## ann rownames == stat_mat rownames; remap
       new_ids <- ann[[id_col]][match(rownames(stat_mat), rownames(ann))]
+      new_ids <- as.character(new_ids)
       unmapped <- is.na(new_ids)
       new_ids[unmapped] <- rownames(stat_mat)[unmapped]
-      rownames(stat_mat) <- new_ids
+      if (anyDuplicated(new_ids)) {
+        dup <- unique(new_ids[duplicated(new_ids)])
+        tps_abort(paste0(
+          "id_col='", id_col, "' maps multiple features to the same id (e.g. ",
+          paste(head(dup, 3L), collapse = ", "),
+          "). Resolve or aggregate duplicate mappings before pathway scoring."
+        ))
+      }
+      pathway_ids <- new_ids
     }
   } else if (is.matrix(fit) && is.numeric(fit)) {
     stat_mat <- fit
@@ -132,9 +167,25 @@ tps_pathway_scores <- function(fit, term2gene, type = "moderated_t",
     tps_abort("fit must be a tps_fit object or a numeric matrix.")
   }
 
-  universe <- rownames(stat_mat)
-  if (is.null(universe)) {
+  feature_ids <- rownames(stat_mat)
+  if (is.null(feature_ids)) {
     tps_abort("statistic matrix must have row names (feature ids).")
+  }
+  if (anyDuplicated(feature_ids)) {
+    tps_abort("statistic matrix row names must be unique feature ids.")
+  }
+  if (is.null(pathway_ids)) pathway_ids <- feature_ids
+
+  ## Keep one common, finite feature universe across all contrasts. Treating an
+  ## unestimable statistic as zero would silently turn missing evidence into a
+  ## null effect and dilute pathway scores.
+  finite_rows <- apply(is.finite(stat_mat), 1L, all)
+  dropped_nonfinite <- feature_ids[!finite_rows]
+  stat_mat <- stat_mat[finite_rows, , drop = FALSE]
+  pathway_ids <- pathway_ids[finite_rows]
+  universe <- pathway_ids
+  if (length(universe) == 0L) {
+    tps_abort("statistic matrix has no features finite across all selected contrasts.")
   }
 
   M <- .build_membership(term2gene, universe, min_size = 0L)
@@ -176,6 +227,8 @@ tps_pathway_scores <- function(fit, term2gene, type = "moderated_t",
     coverage = obs_size / pmax(lib_size, 1L),
     stringsAsFactors = FALSE)
 
+  all_pathways <- unique(as.character(term2gene$term))
+  all_pathways <- all_pathways[!is.na(all_pathways) & nzchar(all_pathways)]
   out <- structure(
     list(
       scores = list(NET = NET, REM = REM, COH = COH),
@@ -184,9 +237,14 @@ tps_pathway_scores <- function(fit, term2gene, type = "moderated_t",
       statistic_matrix = stat_mat,
       statistic_type = type,
       universe = universe,
+      feature_ids = rownames(stat_mat),
+      id_mapping = data.frame(feature_id = rownames(stat_mat),
+                              pathway_id = pathway_ids,
+                              stringsAsFactors = FALSE),
       min_size = min_size,
       min_coverage = min_coverage,
-      dropped_pathways = attr(.build_membership(term2gene, universe, 0L), "dropped"),
+      dropped_pathways = setdiff(all_pathways, rownames(M)),
+      dropped_features_nonfinite = dropped_nonfinite,
       provenance = list(.make_provenance(arg_capture, fit, stage = "pathway_scores"))
     ),
     class = "tps_pathway_scores"
@@ -207,8 +265,12 @@ print.tps_pathway_scores <- function(x, ...) {
   cat(sprintf("  coverage: min=%.2f median=%.2f\n",
               min(pt$coverage), stats::median(pt$coverage)))
   if (length(x$dropped_pathways)) {
-    cat(sprintf("  dropped (< min_size %d): %d\n",
-                x$min_size, length(x$dropped_pathways)))
+    cat(sprintf("  pathways dropped by size/coverage filters: %d\n",
+                length(x$dropped_pathways)))
+  }
+  if (length(x$dropped_features_nonfinite)) {
+    cat(sprintf("  features dropped (non-finite statistic): %d\n",
+                length(x$dropped_features_nonfinite)))
   }
   invisible(x)
 }

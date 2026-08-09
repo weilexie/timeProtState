@@ -20,6 +20,7 @@ Returns the per-feature state table (evidence axes + final state) from a
 \code{tps_states} object.
 }
 \examples{
+data(tps_example, package = "timeProtState")
 se <- tps_import(tps_example_abundance, tps_example_metadata)
 design <- tps_make_design(se)
 contrasts <- tps_make_contrasts(design, endpoint = 7)

@@ -32,6 +32,7 @@ Produces a ggplot volcano plot of -log10(P) vs logFC for a single contrast
 from a \code{tps_fit}. Consumes already-computed statistics; does not re-fit.
 }
 \examples{
+data(tps_example, package = "timeProtState")
 se <- tps_import(tps_example_abundance, tps_example_metadata)
 design <- tps_make_design(se)
 contrasts <- tps_make_contrasts(design, endpoint = 7)

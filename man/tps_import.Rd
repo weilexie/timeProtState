@@ -36,7 +36,7 @@ a \code{SummarizedExperiment} with provenance recorded in
 Builds a \code{\link[SummarizedExperiment]{SummarizedExperiment}} from a
 protein-by-sample abundance matrix and sample metadata, enforcing the
 data contract required by the rest of the package: a shared baseline,
-sortable time, estimable condition-by-time groups, and aligned ids.
+numeric time, estimable condition-by-time groups, and aligned ids.
 }
 \details{
 Imputation is NOT performed at import (missing values are preserved).
@@ -44,6 +44,7 @@ Missing values are preserved and surface naturally in downstream limma
 fitting.
 }
 \examples{
+data(tps_example, package = "timeProtState")
 se <- tps_import(
   abundance = tps_example_abundance,
   col_data  = tps_example_metadata,

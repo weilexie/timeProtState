@@ -46,6 +46,7 @@ Clustering is an adapter, not a methodological contribution; the package
 does not claim to find an "optimal K".
 }
 \examples{
+data(tps_example, package = "timeProtState")
 se <- tps_import(tps_example_abundance, tps_example_metadata)
 traj <- tps_trajectory_matrix(se)
 cl <- tps_cluster_trajectories(traj, method = "kmeans", k = 4, seed = 1)

@@ -124,8 +124,8 @@ test_that("heterogeneity family span is reference-invariant (STATISTICAL_CONTRAC
   se <- tps_import(tps_example_abundance, tps_example_metadata)
   d <- tps_make_design(se)
   ## Changing the reference condition must span the SAME model-difference
-  ## subspace: equal rank and equal column space. (Numerical F-equality holds
-  ## only under pure OLS; trend/robust eBayes weights make it approximate.
+  ## subspace: equal rank and equal column space. With feature-level missing
+  ## values, contrasts.fit uses an approximate covariance transformation.
   ## STATISTICAL_CONTRACT invariant 4 is therefore expressed as subspace
   ## equivalence, which is the mathematically provable form.)
   c1 <- tps_make_contrasts(d, endpoint = 7, reference_condition = "Acid")
@@ -142,12 +142,10 @@ test_that("heterogeneity family span is reference-invariant (STATISTICAL_CONTRAC
 })
 
 test_that("heterogeneity contrast subspace equivalence is the provable invariant", {
-  ## NOTE for STATISTICAL_CONTRACT: limma moderated F/t statistics are NOT
-  ## reference-invariant even with trend=FALSE, robust=FALSE, because eBayes
-  ## variance moderation depends on the residual structure which differs by
-  ## parameterization. The mathematically provable invariant is subspace
-  ## equivalence (column space), tested above. Numerical F equality holds only
-  ## for unmoderated OLS anova, which limma does not expose directly.
+  ## NOTE for STATISTICAL_CONTRACT: the mathematically provable design-level
+  ## invariant is subspace equivalence. Numerical limma F equality also holds
+  ## for complete feature-level data, but may not hold when per-feature missing
+  ## values make contrasts.fit's covariance transformation approximate.
   ## This test documents that finding by confirming the subspace test passes
   ## (already in the previous test) and that the two families are both valid
   ## full-rank encodings.

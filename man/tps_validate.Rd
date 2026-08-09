@@ -25,6 +25,7 @@ warnings. The checks cover sample-id uniqueness, baseline sharing,
 time ordering, group estimability, and all-NA features.
 }
 \examples{
+data(tps_example, package = "timeProtState")
 se <- tps_import(tps_example_abundance, tps_example_metadata)
 report <- tps_validate(se)
 report$ok

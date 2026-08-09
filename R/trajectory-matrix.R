@@ -13,7 +13,8 @@
 ## are mutually consistent and auditable.
 
 ## ---- group means ----------------------------------------------------------
-.group_means <- function(se, condition_col, time_col, is_baseline_col, assay_name) {
+.group_means <- function(se, condition_col, time_col, is_baseline_col,
+                         assay_name, summary) {
   expr <- SummarizedExperiment::assay(se, assay_name)
   cd <- SummarizedExperiment::colData(se)
   cond <- as.character(cd[[condition_col]])
@@ -24,13 +25,20 @@
   cell[bl] <- "baseline"
   cell[!bl] <- paste(cond[!bl], tms[!bl], sep = "_")
   cells <- unique(cell)
-  ## mean per protein per cell (na.rm)
+  ## summarize each protein within each cell.
   gm <- vapply(cells, function(cc) {
     cols <- which(cell == cc)
     if (length(cols) == 0L) rep(NA_real_, nrow(expr))
-    else rowMeans(expr[, cols, drop = FALSE], na.rm = TRUE)
+    else if (summary == "mean") {
+      rowMeans(expr[, cols, drop = FALSE], na.rm = TRUE)
+    } else {
+      apply(expr[, cols, drop = FALSE], 1L, stats::median, na.rm = TRUE)
+    }
   }, numeric(nrow(expr)))
-  if (!is.matrix(gm)) gm <- t(gm)  # single-cell edge case
+  if (!is.matrix(gm)) gm <- matrix(gm, nrow = nrow(expr))
+  rownames(gm) <- rownames(expr)
+  colnames(gm) <- cells
+  gm[is.nan(gm)] <- NA_real_
   list(means = gm, cells = cells)
 }
 
@@ -58,6 +66,7 @@
 #'   cell ordering, missingness summary, and provenance.
 #'
 #' @examples
+#' data(tps_example, package = "timeProtState")
 #' se <- tps_import(tps_example_abundance, tps_example_metadata)
 #' traj <- tps_trajectory_matrix(se)
 #' names(traj)
@@ -85,13 +94,22 @@ tps_trajectory_matrix <- function(se, features = NULL,
     tps_abort("colData must contain condition, time, is_baseline columns.")
   }
 
-  gm <- .group_means(se, condition, time, is_baseline, assay_name)
+  cd <- as.data.frame(SummarizedExperiment::colData(se))
+  binfo <- .baseline_info(cd[[condition]], cd[[time]], cd[[is_baseline]])
+  if (!binfo$shared_baseline) {
+    tps_abort("tps_trajectory_matrix requires one shared baseline group.")
+  }
+  gm <- .group_means(se, condition, time, is_baseline, assay_name, summary)
   means <- gm$means
   if (!is.null(features)) {
-    means <- means[intersect(features, rownames(means)), , drop = FALSE]
+    unknown <- setdiff(features, rownames(means))
+    if (length(unknown)) {
+      tps_abort("features not found in assay: %s.",
+                paste(head(unknown, 5L), collapse = ", "))
+    }
+    means <- means[features, , drop = FALSE]
   }
   cells <- gm$cells
-  cd <- as.data.frame(SummarizedExperiment::colData(se))
   bl <- as.logical(cd[[is_baseline]])
   cond_vec <- as.character(cd[[condition]])
   tms <- cd[[time]]
@@ -102,6 +120,11 @@ tps_trajectory_matrix <- function(se, features = NULL,
   baseline_cell <- "baseline"
   cond_cells <- paste(rep(conditions, each = length(times)),
                        rep(times, length(conditions)), sep = "_")
+  missing_cells <- setdiff(cond_cells, colnames(means))
+  if (length(missing_cells)) {
+    tps_abort("condition-by-time cells missing from trajectory input: %s.",
+              paste(head(missing_cells, 8L), collapse = ", "))
+  }
   uc_cols <- c(if (baseline_cell %in% cells) baseline_cell, cond_cells)
   uc_cols <- intersect(uc_cols, colnames(means))
   unique_cell <- means[, uc_cols, drop = FALSE]
@@ -110,10 +133,15 @@ tps_trajectory_matrix <- function(se, features = NULL,
   display_cols <- unlist(lapply(conditions, function(cc) {
     c(baseline_cell, paste(cc, times, sep = "_"))
   }))
-  display_cols <- intersect(display_cols, colnames(means))
+  display_cols <- display_cols[display_cols %in% colnames(means)]
   display_mat <- means[, display_cols, drop = FALSE]
-  colnames(display_mat) <- sub(paste0("^", baseline_cell, "$"),
-                                "baseline_t0", colnames(display_mat))
+  baseline_label <- format(binfo$baseline_time, trim = TRUE,
+                           scientific = FALSE)
+  display_names <- unlist(lapply(conditions, function(cc) {
+    c(paste0(cc, "_baseline_t", baseline_label),
+      paste(cc, times, sep = "_"))
+  }))
+  colnames(display_mat) <- display_names
 
   ## delta-from-baseline: log2FC vs baseline, per cond_time
   if (baseline_cell %in% colnames(means)) {

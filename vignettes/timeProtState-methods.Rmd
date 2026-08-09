@@ -43,10 +43,12 @@ baseline, which artificially weights day-0 in downstream clustering.
 
 The heterogeneity family is reference-invariant in its **column subspace**:
 changing the reference condition spans the same model-difference subspace
-(equal rank). However, limma moderated F/t statistics are **not** numerically
-invariant under re-parameterization, because `eBayes` variance moderation
-depends on the residual structure. Use `tps_make_contrasts(reference_condition=)`
-freely — conclusions are stable — but do not expect bit-identical P-values.
+(equal rank). With complete feature-level observations, the resulting limma
+F-tests agree up to floating-point tolerance. With missing values,
+`limma::contrasts.fit()` uses an approximate covariance transformation, so
+the numerical F-statistics can depend on the chosen reference even though the
+tested subspace is identical. Report the selected reference and use a
+sensitivity check when missingness is appreciable.
 
 # Evidence-decomposed protein states
 
@@ -77,11 +79,15 @@ $$\text{NET}_{g,j} = \frac{\sum_i M_{g,i} s_{i,j}}{\sum_i M_{g,i}}, \quad
 ## Permutation calibration
 
 The default null is **abundance-stratified**: proteins are binned into equal-
-frequency abundance quantiles and permuted within each bin. This controls for
-abundance confounding while keeping pathway correlations via a shared
-permutation structure. Empirical p-values use $+1$ smoothing:
+frequency abundance quantiles and permuted within each bin. This reduces
+abundance imbalance while retaining pathway overlap through a shared
+permutation index. Let $\mu^0$ be the permutation-null mean. The centred,
+two-sided NET p-value uses $+1$ smoothing:
 
-$$p = \frac{\#\{|NET_{null}| \geq |NET_{obs}|\} + 1}{N_{perm} + 1}$$
+$$p_{NET} = \frac{\#\{|NET_{null}-\mu^0| \geq
+|NET_{obs}-\mu^0|\} + 1}{N_{perm} + 1}$$
+
+REM uses an upper-tail comparison, $REM_{null} \geq REM_{obs}$.
 
 **Calibration caveat**: abundance stratification reduces anti-conservative
 bias but does not fully correct it, because within-pathway protein correlations
@@ -101,17 +107,18 @@ interpretable dynamic patterns:
 
 - **early_directional**: NET significant and coherent from the first timepoint
 - **gradual_remodeling**: REM increases progressively, COH rises over time
-- **delayed_opposition**: only the last timepoint shows significant NET with
-  low COH (internal conflict emerges late)
+- **delayed_opposition**: the final supported NET direction reverses an earlier
+  supported direction
 - **transient_burst**: REM peaks mid-course, then subsides
 - **directional_delayed**: NET becomes significant at later timepoints
 - **sustained_remodeling**: REM significant throughout, NET never directional
-- **divergent**: conditions separate in NET direction at some timepoint
 
-This is the key differentiator from two-step pipelines (protein DE →
-enrichment): the full rank-audited contrast family's moderated statistics
-drive pathway-level inference directly, preserving direction and uncertainty
-at every timepoint. `tps_link_states_pathways()` further connects
+Cross-condition **divergence** is reported as a separate flag when supported
+NET directions oppose one another at a matched timepoint.
+
+The full rank-audited contrast family's moderated statistics drive pathway-level
+inference directly, preserving direction and uncertainty at every timepoint.
+`tps_link_states_pathways()` further connects
 protein-level evidence states to pathway-level dynamics, enabling diagnoses
 like "do temporal-reversal proteins cluster in transient-burst pathways?"
 

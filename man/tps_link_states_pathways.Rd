@@ -33,8 +33,9 @@ pathway dynamic combination, reports whether proteins in that state are
 enriched in pathways showing that dynamic pattern.
 }
 \details{
-This is not standard ORA -- it connects protein-level evidence axes to
-pathway-level remodeling axes bidirectionally, enabling diagnoses like:
+This applies a standard hypergeometric enrichment test to connect
+protein-level evidence axes with pathway-level remodeling labels, enabling
+diagnoses like:
 "do temporal-reversal proteins cluster in transient-burst pathways?"
 }
 \examples{

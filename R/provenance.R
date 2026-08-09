@@ -77,6 +77,7 @@ digest_list <- function(x) {
 #'   \code{NULL} if none recorded.
 #'
 #' @examples
+#' data(tps_example, package = "timeProtState")
 #' se <- tps_import(tps_example_abundance, tps_example_metadata)
 #' pv <- tps_provenance(se)
 #' if (!is.null(pv)) pv[[1]]$stage

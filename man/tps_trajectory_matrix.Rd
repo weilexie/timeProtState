@@ -43,6 +43,7 @@ shared-baseline design:
 }
 }
 \examples{
+data(tps_example, package = "timeProtState")
 se <- tps_import(tps_example_abundance, tps_example_metadata)
 traj <- tps_trajectory_matrix(se)
 names(traj)

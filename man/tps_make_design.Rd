@@ -41,6 +41,7 @@ baseline rows at one timepoint), the baseline collapses to a single cell
 shared by all conditions; otherwise a general group-means model is used.
 }
 \examples{
+data(tps_example, package = "timeProtState")
 se <- tps_import(tps_example_abundance, tps_example_metadata)
 design <- tps_make_design(se, condition = "condition", time = "time",
                            is_baseline = "is_baseline")

@@ -17,25 +17,11 @@
 #'   }
 #' @name tps_example
 #' @docType data
+#' @aliases tps_example_abundance tps_example_metadata
+#'   tps_example_annotation tps_example_term2gene
 #' @keywords datasets
 #' @usage data(tps_example, package = "timeProtState")
 #' @examples
 #' data(tps_example, package = "timeProtState")
 #' dim(tps_example_abundance)
 NULL
-
-#' @rdname tps_example
-#' @format NULL
-"tps_example_abundance"
-
-#' @rdname tps_example
-#' @format NULL
-"tps_example_metadata"
-
-#' @rdname tps_example
-#' @format NULL
-"tps_example_annotation"
-
-#' @rdname tps_example
-#' @format NULL
-"tps_example_term2gene"

@@ -11,11 +11,9 @@
 ## pair. This module classifies those trajectories into biologically
 ## interpretable dynamic patterns and links them to protein-level states.
 ##
-## This is the differentiator vs TiDEomics: TiDEomics does protein-level DE
-## then standard enrichment (two-step, loses pathway direction structure).
-## We use the full rank-audited contrast family's moderated statistics to
-## drive pathway-level inference directly -- one integrated step that
-## preserves direction and uncertainty, and is calibrated per-timepoint.
+## The full rank-audited contrast family's moderated statistics drive the
+## pathway summaries directly, retaining direction and model uncertainty at
+## every timepoint before permutation calibration.
 
 ## ---- contrast-time parser --------------------------------------------------
 ## Parse contrast names like "Acid_t7_vs_baseline" into (condition, time).
@@ -25,7 +23,7 @@
   base <- sub("_vs_baseline$", "", contrast_names)
   ## split on "_t" -- condition may contain underscores, time is last segment
   ## pattern: <condition>_t<time>  e.g. "Acid_t7", "Starvation_t3"
-  cond <- sub("_t[0-9.]+$", "", base)
+  cond <- sub("_t[^_]+$", "", base)
   time_str <- sub("^.*_t", "", base)
   time <- suppressWarnings(as.numeric(time_str))
   data.frame(contrast = contrast_names, condition = cond, time = time,
@@ -61,9 +59,19 @@
     }
   }
 
-  ## delayed_opposition: only the LAST timepoint is NET-significant
+  ## delayed_opposition: the final supported NET direction reverses an earlier
+  ## supported direction. A last-only signal is delayed, not opposition.
+  if (n >= 2L && isTRUE(sig[n]) && any(sig[-n], na.rm = TRUE)) {
+    earlier <- net[-n][sig[-n] & !is.na(net[-n])]
+    if (length(earlier) && isTRUE(sign(net[n]) != 0) &&
+        any(sign(earlier) == -sign(net[n]))) {
+      return("delayed_opposition")
+    }
+  }
+
+  ## last-only directional signal.
   if (n >= 2L && isTRUE(sig[n]) && !any(sig[-n], na.rm = TRUE)) {
-    return("delayed_opposition")
+    return("directional_delayed")
   }
 
   ## gradual_remodeling: REM increases over time, signal builds progressively.
@@ -72,9 +80,12 @@
     return("gradual_remodeling")
   }
 
-  ## early_directional: first timepoint NET-significant with high COH AND
-  ## signal persists (at least 2 timepoints significant).
-  if (isTRUE(sig[1L]) && isTRUE(coh_1 >= coh_cut) && sum(sig, na.rm = TRUE) >= 2L) {
+  ## early_directional: first timepoint NET-significant with high COH and a
+  ## persistent, directionally consistent signal.
+  sig_net <- net[sig & !is.na(net)]
+  same_direction <- length(sig_net) >= 2L &&
+    length(unique(sign(sig_net[sign(sig_net) != 0]))) == 1L
+  if (isTRUE(sig[1L]) && isTRUE(coh_1 >= coh_cut) && same_direction) {
     return("early_directional")
   }
 
@@ -82,9 +93,34 @@
   if (any(sig, na.rm = TRUE)) return("directional_delayed")
 
   ## significant REM but never directional NET -- pure remodeling
-  if (any(sig_rem, na.rm = TRUE) && !any(sig, na.rm = TRUE)) return("sustained_remodeling")
+  if (any(sig_rem, na.rm = TRUE) && !any(sig, na.rm = TRUE)) {
+    return("sustained_remodeling")
+  }
 
   "no_dynamic_signal"
+}
+
+.dynamic_evidence_score <- function(net, rem, net_mean, net_sd,
+                                    rem_mean, rem_sd, meta, eps = 1e-12) {
+  net_z <- abs(net - net_mean) / pmax(net_sd, eps)
+  rem_z <- pmax(rem - rem_mean, 0) / pmax(rem_sd, eps)
+  net_z[net_sd < eps | !is.finite(net_z)] <- -Inf
+  rem_z[rem_sd < eps | !is.finite(rem_z)] <- -Inf
+  cell_score <- net_z
+  cell_score[] <- pmax(net_z, rem_z)
+
+  keys <- character(0)
+  values <- numeric(0)
+  for (i in seq_len(nrow(cell_score))) {
+    for (cc in unique(meta$condition)) {
+      idx <- which(meta$condition == cc)
+      score <- max(cell_score[i, idx], na.rm = TRUE)
+      if (!is.finite(score)) score <- 0
+      keys <- c(keys, paste(rownames(cell_score)[i], cc, sep = "##"))
+      values <- c(values, score)
+    }
+  }
+  setNames(values, keys)
 }
 
 ## ---- detect cross-condition divergence -------------------------------------
@@ -155,6 +191,14 @@ tps_classify_pathway_dynamics <- function(calibrated, alpha = 0.05, coh_cut = 0.
     tps_abort(paste0("calibrated must be a tps_pathway_calibrated object; ",
                      "run tps_calibrate_pathways first."))
   }
+  if (!is.numeric(alpha) || length(alpha) != 1L || is.na(alpha) ||
+      !is.finite(alpha) || alpha <= 0 || alpha >= 1) {
+    tps_abort("alpha must be in (0,1).")
+  }
+  if (!is.numeric(coh_cut) || length(coh_cut) != 1L || is.na(coh_cut) ||
+      !is.finite(coh_cut) || coh_cut < 0 || coh_cut > 1) {
+    tps_abort("coh_cut must be in [0,1].")
+  }
   NET <- calibrated$scores$NET
   REM <- calibrated$scores$REM
   COH <- calibrated$scores$COH
@@ -165,9 +209,11 @@ tps_classify_pathway_dynamics <- function(calibrated, alpha = 0.05, coh_cut = 0.
 
   ## parse time + condition from contrast names
   meta <- .parse_contrast_time(contrasts)
-  if (all(is.na(meta$time))) {
-    tps_abort("Could not parse timepoints from contrast names. Expected ",
-              "format '<condition>_t<time>_vs_baseline' (from family='vs_baseline').")
+  if (anyNA(meta$time)) {
+    tps_abort(paste0(
+      "Could not parse timepoints from contrast names. Expected ",
+      "format '<condition>_t<time>_vs_baseline' (from family='vs_baseline')."
+    ))
   }
 
   ## build long table: one row per term x condition x time
@@ -231,8 +277,9 @@ tps_classify_pathway_dynamics <- function(calibrated, alpha = 0.05, coh_cut = 0.
 #' pathway dynamic combination, reports whether proteins in that state are
 #' enriched in pathways showing that dynamic pattern.
 #'
-#' This is not standard ORA -- it connects protein-level evidence axes to
-#' pathway-level remodeling axes bidirectionally, enabling diagnoses like:
+#' This applies a standard hypergeometric enrichment test to connect
+#' protein-level evidence axes with pathway-level remodeling labels, enabling
+#' diagnoses like:
 #' "do temporal-reversal proteins cluster in transient-burst pathways?"
 #'
 #' @param states a \code{tps_states} object.
@@ -261,33 +308,69 @@ tps_link_states_pathways <- function(states, pathway_dynamics, term2gene,
   if (!inherits(states, "tps_states")) {
     tps_abort("states must be a tps_states object.")
   }
-  if (!is.data.frame(pathway_dynamics) || !"dynamic_state" %in% names(pathway_dynamics)) {
+  if (!is.data.frame(pathway_dynamics) ||
+      !all(c("term", "dynamic_state") %in% names(pathway_dynamics))) {
     tps_abort("pathway_dynamics must be from tps_classify_pathway_dynamics.")
   }
+  if (!is.data.frame(term2gene) ||
+      !all(c("term", "gene") %in% names(term2gene))) {
+    tps_abort("term2gene must have columns 'term' and 'gene'.")
+  }
   st <- states$state_table
+  if (!is.data.frame(st) || !all(c("feature_id", "state") %in% names(st)) ||
+      nrow(st) == 0L) {
+    tps_abort("states$state_table must contain feature_id and state rows.")
+  }
   if (is.null(protein_ids)) protein_ids <- st$feature_id
+  protein_ids <- as.character(protein_ids)
+  if (length(protein_ids) != nrow(st) || anyNA(protein_ids) ||
+      any(!nzchar(protein_ids)) || anyDuplicated(protein_ids)) {
+    tps_abort(paste0(
+      "protein_ids must be unique, non-empty, non-missing, and aligned ",
+      "with state rows."
+    ))
+  }
+  st$.pathway_id <- protein_ids
+
+  pathway_dynamics <- unique(data.frame(
+    term = as.character(pathway_dynamics$term),
+    dynamic_state = as.character(pathway_dynamics$dynamic_state),
+    stringsAsFactors = FALSE
+  ))
+  valid_dyn <- !is.na(pathway_dynamics$term) & nzchar(pathway_dynamics$term) &
+    !is.na(pathway_dynamics$dynamic_state) &
+    nzchar(pathway_dynamics$dynamic_state)
+  pathway_dynamics <- pathway_dynamics[valid_dyn, , drop = FALSE]
+  term2gene <- unique(data.frame(
+    term = as.character(term2gene$term),
+    gene = as.character(term2gene$gene),
+    stringsAsFactors = FALSE
+  ))
+  valid_map <- !is.na(term2gene$term) & nzchar(term2gene$term) &
+    !is.na(term2gene$gene) & nzchar(term2gene$gene)
+  term2gene <- term2gene[valid_map, , drop = FALSE]
+  if (nrow(pathway_dynamics) == 0L || nrow(term2gene) == 0L) {
+    tps_abort("pathway_dynamics and term2gene must contain valid rows.")
+  }
 
   ## analysis universe: proteins observed in the state table (NOT library)
-  universe <- unique(protein_ids)
+  universe <- unique(st$.pathway_id)
   n_universe <- length(universe)
 
   ## protein states
   prot_states <- unique(st$state)
 
-  ## modal dynamic state per pathway (handles multi-condition)
-  dyn_agg <- stats::aggregate(dynamic_state ~ term, data = pathway_dynamics,
-                        FUN = function(x) {
-                          tab <- table(x)
-                          names(tab)[which.max(tab)]
-                        })
-  names(dyn_agg)[2] <- "dynamic_state"
-
   rows <- list()
   for (ps in prot_states) {
-    ps_proteins <- st$feature_id[st$state == ps]
+    ps_proteins <- unique(st$.pathway_id[st$state == ps])
     n_ps <- length(ps_proteins)
-    for (dyn in unique(dyn_agg$dynamic_state)) {
-      dyn_pathways <- dyn_agg$term[dyn_agg$dynamic_state == dyn]
+    for (dyn in unique(pathway_dynamics$dynamic_state)) {
+      ## A pathway may carry different condition-specific dynamic labels. Keep
+      ## every observed term-state association instead of selecting an
+      ## arbitrary modal label.
+      dyn_pathways <- unique(
+        pathway_dynamics$term[pathway_dynamics$dynamic_state == dyn]
+      )
       ## members of these pathways, restricted to analysis universe
       members <- intersect(unique(term2gene$gene[term2gene$term %in% dyn_pathways]),
                             universe)
@@ -308,9 +391,9 @@ tps_link_states_pathways <- function(states, pathway_dynamics, term2gene,
       rows[[length(rows) + 1L]] <- data.frame(
         protein_state = ps, pathway_dynamic = dyn,
         n_proteins_in_state = n_ps, n_pathways_in_dynamic = n_dyn_pathways,
-        observed_overlap = overlap, expected_overlap = round(expected, 2),
-        enrichment = round(enrich, 3),
-        p_hypergeometric = round(p_hyper, 4),
+        observed_overlap = overlap, expected_overlap = expected,
+        enrichment = enrich,
+        p_hypergeometric = p_hyper,
         stringsAsFactors = FALSE)
     }
   }
@@ -324,14 +407,11 @@ tps_link_states_pathways <- function(states, pathway_dynamics, term2gene,
 ## Permutation-calibrated dynamic states + divergence scoring
 ## ============================================================================
 ##
-## NOVELTY: TiDEomics and all competitors calibrate protein-level DE or do
-## standard enrichment. NO tool calibrates the pathway-level DYNAMIC STATE
-## CLASSIFICATION itself. This function generates a null distribution of
-## dynamic states by permuting protein labels, then computes the empirical
-## probability that a pathway-condition pair receives a non-null dynamic
-## state under the null. This is the strongest methodological differentiator:
-## the dynamic classification decision is itself calibrated, not just the
-## underlying NET/REM statistics.
+## This function generates a null distribution of dynamic trajectories by
+## permuting protein labels, then compares the
+## observed maximum standardized NET/REM evidence across time with its
+## permutation null. This calibrates trajectory-level departure while the
+## transparent rule system supplies the descriptive shape label.
 
 ## ---- divergence score (continuous, not just boolean) -----------------------
 .compute_divergence_score <- function(traj_long, alpha) {
@@ -396,7 +476,15 @@ tps_divergence_score <- function(calibrated, dyn = NULL, alpha = 0.05) {
   if (!inherits(calibrated, "tps_pathway_calibrated")) {
     tps_abort("calibrated must be a tps_pathway_calibrated object.")
   }
+  if (!is.numeric(alpha) || length(alpha) != 1L || is.na(alpha) ||
+      !is.finite(alpha) || alpha <= 0 || alpha >= 1) {
+    tps_abort("alpha must be one finite value in (0,1).")
+  }
   if (is.null(dyn)) dyn <- tps_classify_pathway_dynamics(calibrated, alpha = alpha)
+  if (!is.data.frame(dyn) ||
+      !all(c("term", "condition", "time", "NET", "q_net") %in% names(dyn))) {
+    tps_abort("dyn must be a pathway dynamics table.")
+  }
   terms <- unique(dyn$term)
   rows <- list()
   for (tm in terms) {
@@ -435,16 +523,13 @@ tps_divergence_score <- function(calibrated, dyn = NULL, alpha = 0.05) {
 ## ---- permutation-calibrated dynamic states ---------------------------------
 #' Calibrate pathway dynamic states with a permutation null
 #'
-#' Generates a null distribution of dynamic states by permuting protein
-#' labels within the calibrated pathway scores, then computes the empirical
-#' probability that each pathway-condition pair receives a non-null dynamic
-#' state under the null. This calibrates the CLASSIFICATION DECISION itself,
-#' not just the underlying NET/REM statistics.
-#'
-#' This is the key methodological differentiator: no existing tool calibrates
-#' pathway-level dynamic state classification. The result tells you whether
-#' a pathway classified as 'early_directional' is genuinely non-null or could
-#' arise by chance.
+#' Permutes protein labels within the calibrated pathway score universe and
+#' compares each observed pathway-condition trajectory with the permutation
+#' distribution of its maximum standardized NET/REM evidence across time.
+#' This trajectory-level test accounts for searching across timepoints and
+#' both evidence components. The dynamic state remains a descriptive shape
+#' label; p_dynamic tests departure from the trajectory null, not the
+#' probability of a particular label.
 #'
 #' @param calibrated a \code{tps_pathway_calibrated} object.
 #' @param n_perm integer; number of permutations for the null (default 500).
@@ -452,8 +537,8 @@ tps_divergence_score <- function(calibrated, dyn = NULL, alpha = 0.05) {
 #' @param coh_cut numeric; COH threshold (default 0.5).
 #' @param seed integer; RNG seed.
 #' @return a data.frame with the original dynamics plus a column
-#'   \code{p_dynamic} (empirical probability of non-null state under null)
-#'   and \code{q_dynamic} (BH-adjusted).
+#'   \code{p_dynamic} (empirical trajectory-level p-value) and
+#'   \code{q_dynamic} (BH-adjusted).
 #'
 #' @examples
 #' data(tps_example, package = "timeProtState")
@@ -473,19 +558,19 @@ tps_calibrate_dynamics <- function(calibrated, n_perm = 500L, alpha = 0.05,
   if (!inherits(calibrated, "tps_pathway_calibrated")) {
     tps_abort("calibrated must be a tps_pathway_calibrated object.")
   }
-  if (n_perm < 1L) tps_abort("n_perm must be >= 1.")
+  if (!is.numeric(n_perm) || length(n_perm) != 1L || is.na(n_perm) ||
+      !is.finite(n_perm) || n_perm < 1L ||
+      n_perm != as.integer(n_perm)) {
+    tps_abort("n_perm must be one positive integer.")
+  }
+  if (!is.numeric(seed) || length(seed) != 1L || is.na(seed) ||
+      !is.finite(seed)) {
+    tps_abort("seed must be one finite value.")
+  }
 
   ## get observed dynamics
   dyn_obs <- tps_classify_pathway_dynamics(calibrated, alpha = alpha,
                                             coh_cut = coh_cut)
-
-  ## local RNG
-  rng_old <- .GlobalEnv$.Random.seed
-  on.exit({
-    if (is.null(rng_old)) rm(".Random.seed", envir = .GlobalEnv)
-    else .GlobalEnv$.Random.seed <- rng_old
-  }, add = TRUE)
-  set.seed(seed)
 
   ## For each permutation: shuffle protein labels in the statistic matrix,
   ## recompute NET/REM/COH, re-classify, count non-null.
@@ -497,67 +582,50 @@ tps_calibrate_dynamics <- function(calibrated, n_perm = 500L, alpha = 0.05,
   abs_stat <- abs(stat_mat)
   eps <- 1e-12
 
-  ## Use the parent null's mean/SD (from tps_calibrate_pathways) to construct
-  ## a z-score gate for the null classification. Under permutation, NET_null
-  ## is a draw from the same null distribution, so its z-score is ~N(0,1).
-  ## Gate on |z| > z_alpha (two-sided) to approximate the per-timepoint
-  ## significance test under the null. This is the key fix: the previous
-  ## implementation used q=0.5 (never significant), making the null inert.
+  ## Parent null summaries standardize NET and REM across pathways/contrasts.
   net_null_mean <- calibrated$net_null_mean
   net_null_sd <- calibrated$net_null_sd
   rem_null_mean <- calibrated$rem_null_mean
   rem_null_sd <- calibrated$rem_null_sd
-  ## Guard: when net_null_sd == 0 (degenerate null, e.g. singleton pathway
-  ## or all-identical statistics), z-score is undefined. Set q=1 (non-sig)
-  ## for those cells to avoid false positives from division by eps.
-  sd_zero_net <- net_null_sd < eps
-  sd_zero_rem <- rem_null_sd < eps
-
-  ## accumulate: for each (term, condition), count #{null classified non-null}
+  ## The observed statistic is the maximum standardized NET/REM departure over
+  ## time for each pathway-condition pair. The permutation maximum automatically
+  ## accounts for searching across timepoints and both evidence components.
   meta <- .parse_contrast_time(colnames(stat_mat))
-  term_cond_pairs <- unique(dyn_obs[, c("term", "condition")])
-  null_count <- rep(0L, nrow(term_cond_pairs))
-  names(null_count) <- paste(term_cond_pairs$term, term_cond_pairs$condition, sep = "##")
+  if (anyNA(meta$time)) {
+    tps_abort("Could not parse every contrast as '<condition>_t<time>_vs_baseline'.")
+  }
+  observed_score <- .dynamic_evidence_score(
+    calibrated$scores$NET, calibrated$scores$REM,
+    net_null_mean, net_null_sd, rem_null_mean, rem_null_sd, meta, eps
+  )
+  null_count <- setNames(rep(0L, length(observed_score)), names(observed_score))
 
-  for (b in seq_len(n_perm)) {
-    idx <- sample.int(n_prot)
-    Tp <- stat_mat[idx, , drop = FALSE]
-    net_null <- as.matrix(Mt %*% Tp) / sizes
-    rem_null <- as.matrix(Mt %*% abs_stat[idx, , drop = FALSE]) / sizes
-    coh_null <- abs(net_null) / (rem_null + eps)
-
-    ## z-score gate: under null, NET_null ~ N(net_null_mean, net_null_sd)
-    ## so q = 2*pnorm(-|z|) approximates the per-timepoint p-value.
-    ## When net_null_sd == 0 (degenerate), set q=1 (non-significant).
-    z_net <- (net_null - net_null_mean) / pmax(net_null_sd, eps)
-    z_rem <- (rem_null - rem_null_mean) / pmax(rem_null_sd, eps)
-    q_null <- 2 * stats::pnorm(-abs(z_net))
-    q_rem_null <- 2 * stats::pnorm(-abs(z_rem))
-    q_null[sd_zero_net] <- 1
-    q_rem_null[sd_zero_rem] <- 1
-
-    ## classify each term-condition under null
-    terms <- rownames(net_null)
-    for (i in seq_along(terms)) {
-      for (cc in unique(meta$condition)) {
-        idx_cc <- which(meta$condition == cc)
-        idx_cc <- idx_cc[order(meta$time[idx_cc])]
-        if (length(idx_cc) == 0L) next
-        dyn_null <- .classify_one_trajectory(
-          net = net_null[i, idx_cc], rem = rem_null[i, idx_cc],
-          coh = coh_null[i, idx_cc], q_net = q_null[i, idx_cc],
-          q_rem = q_rem_null[i, idx_cc], alpha = alpha, coh_cut = coh_cut)
-        if (dyn_null != "no_dynamic_signal") {
-          key <- paste(terms[i], cc, sep = "##")
-          if (key %in% names(null_count)) {
-            null_count[key] <- null_count[key] + 1L
-          }
-        }
-      }
+  bin_list <- bin_template <- NULL
+  if (identical(calibrated$mode, "abundance_stratified")) {
+    bins <- calibrated$abundance_bins
+    if (is.null(bins) || length(bins) != n_prot) {
+      tps_abort("calibrated object lacks abundance bins required for dynamics null.")
     }
+    bin_list <- split(seq_len(n_prot), bins)
+    bin_template <- unlist(bin_list, use.names = FALSE)
   }
 
-  ## empirical p(dynamic != null | permuted) per term-condition
+  withr::with_seed(seed, {
+    for (b in seq_len(n_perm)) {
+      idx <- .perm_index(n_prot, calibrated$mode, bin_list, bin_template)
+      Tp <- stat_mat[idx, , drop = FALSE]
+      net_null <- as.matrix(Mt %*% Tp) / sizes
+      rem_null <- as.matrix(Mt %*% abs_stat[idx, , drop = FALSE]) / sizes
+      null_score <- .dynamic_evidence_score(
+        net_null, rem_null, net_null_mean, net_null_sd,
+        rem_null_mean, rem_null_sd, meta, eps
+      )
+      null_count <- null_count +
+        as.integer(null_score[names(observed_score)] >= observed_score - eps)
+    }
+  })
+
+  ## Empirical trajectory-level p-value per term-condition.
   p_dynamic <- (null_count + 1) / (n_perm + 1)
   q_dynamic <- stats::p.adjust(p_dynamic, method = "BH")
 

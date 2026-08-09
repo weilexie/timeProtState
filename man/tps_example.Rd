@@ -19,14 +19,6 @@ A list of four objects:
 }
 \usage{
 data(tps_example, package = "timeProtState")
-
-tps_example_abundance
-
-tps_example_metadata
-
-tps_example_annotation
-
-tps_example_term2gene
 }
 \description{
 Small synthetic dataset mirroring the structure of a shared-baseline

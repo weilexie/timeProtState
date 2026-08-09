@@ -21,6 +21,7 @@ entry records the stage, function call, timestamp, input checksum, and
 package version.
 }
 \examples{
+data(tps_example, package = "timeProtState")
 se <- tps_import(tps_example_abundance, tps_example_metadata)
 pv <- tps_provenance(se)
 if (!is.null(pv)) pv[[1]]$stage

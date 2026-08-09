@@ -11,15 +11,17 @@ TimeModel used 6 (full rank). Spec required "reference-invariance".
 
 ## Empirical finding
 
-limma moderated F/t are NOT numerically invariant under re-parameterization
-(even with trend=FALSE, robust=FALSE), because eBayes variance moderation
-depends on residual structure. Only column-subspace equivalence is provable.
+With complete feature-level observations, limma F-tests agree across reference
+encodings up to floating-point tolerance. With missing values,
+`limma::contrasts.fit()` applies an approximate covariance transformation and
+the numerical F-statistics can differ even with `trend=FALSE, robust=FALSE`.
+Column-subspace equivalence remains the design-level invariant.
 
 ## Decision
 
 - Use 6-contrast full-rank heterogeneity family.
-- Test subspace equivalence (`rank(cm1) == rank(cbind(cm1, cm2))`), not
-  numerical F equality.
+- Test subspace equivalence (`rank(cm1) == rank(cbind(cm1, cm2))`). Treat
+  numerical F equality as expected only for complete feature-level data.
 
 ## Evidence
 

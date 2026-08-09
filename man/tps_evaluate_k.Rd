@@ -33,6 +33,7 @@ the choice of cluster count. This is descriptive only; the package does not
 claim a single optimal K.
 }
 \examples{
+data(tps_example, package = "timeProtState")
 se <- tps_import(tps_example_abundance, tps_example_metadata)
 traj <- tps_trajectory_matrix(se)
 keval <- tps_evaluate_k(traj, k_range = 3:6, method = "kmeans")

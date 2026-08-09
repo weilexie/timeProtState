@@ -38,6 +38,20 @@ tps_known_optional_cols <- function() {
   c("replicate", "batch", "run_order", "subject_id", "block", "weight")
 }
 
+.baseline_info <- function(condition, time, is_baseline) {
+  bl <- !is.na(is_baseline) & as.logical(is_baseline)
+  baseline_times <- unique(time[bl])
+  baseline_conditions <- unique(as.character(condition[bl]))
+  valid_time <- length(baseline_times) == 1L && !anyNA(baseline_times)
+  valid_condition <- length(baseline_conditions) == 1L &&
+    !anyNA(baseline_conditions) && nzchar(baseline_conditions)
+  list(
+    baseline_time = baseline_times,
+    baseline_conditions = baseline_conditions,
+    shared_baseline = any(bl) && valid_time && valid_condition
+  )
+}
+
 ## ---- hashing for provenance -----------------------------------------------
 ## A small, dependency-free checksum used to fingerprint input matrices.
 ## Not cryptographically strong; sufficient for detecting accidental edits.

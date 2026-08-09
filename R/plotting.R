@@ -44,6 +44,7 @@
 #'   \code{"data"}.
 #'
 #' @examples
+#' data(tps_example, package = "timeProtState")
 #' se <- tps_import(tps_example_abundance, tps_example_metadata)
 #' design <- tps_make_design(se)
 #' contrasts <- tps_make_contrasts(design, endpoint = 7)
@@ -57,6 +58,17 @@ tps_plot_volcano <- function(fit, contrast, significance = "adj.P.Val",
     tps_abort("ggplot2 is required for plotting; install it or it is in Suggests.")
   }
   if (!inherits(fit, "tps_fit")) tps_abort("fit must be a tps_fit object.")
+  if (length(significance) != 1L ||
+      !significance %in% c("adj.P.Val", "P.Value")) {
+    tps_abort("significance must be 'adj.P.Val' or 'P.Value'.")
+  }
+  if (length(alpha) != 1L || is.na(alpha) || alpha <= 0 || alpha >= 1) {
+    tps_abort("alpha must be in (0,1).")
+  }
+  if (length(lfc_threshold) != 1L || is.na(lfc_threshold) ||
+      !is.finite(lfc_threshold) || lfc_threshold < 0) {
+    tps_abort("lfc_threshold must be one non-negative finite value.")
+  }
   d <- tps_results(fit, contrast = contrast)
   d <- d[d$test == "t", , drop = FALSE]
   if (nrow(d) == 0L) tps_abort("contrast '%s' has no t-test rows.", contrast)
@@ -97,6 +109,7 @@ tps_plot_volcano <- function(fit, contrast, significance = "adj.P.Val",
 #' @return a ggplot object.
 #'
 #' @examples
+#' data(tps_example, package = "timeProtState")
 #' se <- tps_import(tps_example_abundance, tps_example_metadata)
 #' traj <- tps_trajectory_matrix(se)
 #' cl <- tps_cluster_trajectories(traj, method = "kmeans", k = 4, seed = 1)
@@ -107,11 +120,17 @@ tps_plot_trajectories <- function(clusters, n_features = 100L) {
   if (!requireNamespace("ggplot2", quietly = TRUE)) {
     tps_abort("ggplot2 is required for plotting.")
   }
+  if (!is.numeric(n_features) || length(n_features) != 1L ||
+      is.na(n_features) || !is.finite(n_features) || n_features < 1L ||
+      n_features != as.integer(n_features)) {
+    tps_abort("n_features must be one positive integer.")
+  }
   if (inherits(clusters, "tps_clusters")) {
     ## plot centroids: cells x clusters matrix; rownames = cells
     cen <- clusters$centroids  # matrix cells x clusters
     long <- reshape2_or_gather(cen, key = "cluster", value = "value",
                                id = "cell")
+    long$cell <- factor(long$cell, levels = rownames(cen))
     long$cluster <- factor(long$cluster)
     p <- ggplot2::ggplot(long, ggplot2::aes(.data$cell, .data$value,
                                              group = .data$cluster,
@@ -222,6 +241,7 @@ tps_plot_pathway_states <- function(pathway_states) {
 #' @return a ggplot object.
 #'
 #' @examples
+#' data(tps_example, package = "timeProtState")
 #' se <- tps_import(tps_example_abundance, tps_example_metadata)
 #' design <- tps_make_design(se)
 #' contrasts <- tps_make_contrasts(design, endpoint = 7)
@@ -256,8 +276,8 @@ tps_plot_state_distribution <- function(states) {
 #' Plot pathway remodeling trajectory over time
 #'
 #' Produces a ggplot showing NET, REM, or COH for a single pathway across all
-#' timepoints and conditions, with significant timepoints (q_net < alpha)
-#' marked. Requires the pathway scores to have been computed with
+#' timepoints and conditions, with significant timepoints marked using
+#' q_rem for REM and q_net for NET/COH. Requires the pathway scores to have been computed with
 #' \code{family = "vs_baseline"} (all timepoints), not just endpoint.
 #'
 #' @param calibrated a \code{tps_pathway_calibrated} object.
@@ -288,6 +308,9 @@ tps_plot_pathway_trajectory <- function(calibrated, term,
   if (!inherits(calibrated, "tps_pathway_calibrated")) {
     tps_abort("calibrated must be a tps_pathway_calibrated object.")
   }
+  if (length(alpha) != 1L || is.na(alpha) || alpha <= 0 || alpha >= 1) {
+    tps_abort("alpha must be in (0,1).")
+  }
   metric <- match.arg(metric)
   if (!term %in% rownames(calibrated$scores[[metric]])) {
     tps_abort("term '%s' not found in pathway scores.", term)
@@ -295,7 +318,8 @@ tps_plot_pathway_trajectory <- function(calibrated, term,
   ## build long data for this pathway
   meta <- .parse_contrast_time_pub(colnames(calibrated$scores[[metric]]))
   vals <- calibrated$scores[[metric]][term, ]
-  qvals <- calibrated$q_net[term, ]
+  q_name <- if (identical(metric, "REM")) "q_rem" else "q_net"
+  qvals <- calibrated[[q_name]][term, ]
   df <- data.frame(
     time = meta$time, condition = meta$condition,
     value = as.numeric(vals),
@@ -310,7 +334,7 @@ tps_plot_pathway_trajectory <- function(calibrated, term,
     ggplot2::geom_line(linewidth = 1.1) +
     ggplot2::geom_point(ggplot2::aes(shape = .data$significant), size = 2.5) +
     ggplot2::scale_shape_manual(values = c("TRUE" = 17, "FALSE" = 16),
-                                 name = sprintf("q_net < %s", alpha)) +
+                                 name = sprintf("%s < %s", q_name, alpha)) +
     ggplot2::geom_hline(yintercept = 0, color = "grey60", linetype = "dashed") +
     ggplot2::labs(title = sprintf("%s -- %s trajectory", term, metric),
                   x = "time", y = metric, color = "condition") +
@@ -321,7 +345,7 @@ tps_plot_pathway_trajectory <- function(calibrated, term,
 ## public wrapper for the contrast-time parser (used by plotting)
 .parse_contrast_time_pub <- function(contrast_names) {
   base <- sub("_vs_baseline$", "", contrast_names)
-  cond <- sub("_t[0-9.]+$", "", base)
+  cond <- sub("_t[^_]+$", "", base)
   time_str <- sub("^.*_t", "", base)
   time <- suppressWarnings(as.numeric(time_str))
   data.frame(contrast = contrast_names, condition = cond, time = time,

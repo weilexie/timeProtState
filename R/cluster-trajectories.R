@@ -52,6 +52,7 @@
 #'   membership (soft) or hard labels, centroids, and QC summary.
 #'
 #' @examples
+#' data(tps_example, package = "timeProtState")
 #' se <- tps_import(tps_example_abundance, tps_example_metadata)
 #' traj <- tps_trajectory_matrix(se)
 #' cl <- tps_cluster_trajectories(traj, method = "kmeans", k = 4, seed = 1)
@@ -72,54 +73,83 @@ tps_cluster_trajectories <- function(trajectory, method = c("mfuzz","kmeans"),
   } else {
     tps_abort("trajectory must be a tps_trajectory or a numeric matrix.")
   }
-  if (k < 2L) tps_abort("k must be >= 2.")
+  if (nrow(mat) == 0L || ncol(mat) < 2L) {
+    tps_abort("trajectory matrix must have features and at least two cells.")
+  }
+  if (is.null(rownames(mat))) {
+    rownames(mat) <- sprintf("feature_%d", seq_len(nrow(mat)))
+  }
+  if (anyNA(rownames(mat)) || any(!nzchar(rownames(mat))) ||
+      anyDuplicated(rownames(mat))) {
+    tps_abort("trajectory matrix row names must be unique, non-empty feature ids.")
+  }
+  if (is.null(colnames(mat))) {
+    colnames(mat) <- sprintf("cell_%d", seq_len(ncol(mat)))
+  }
+  if (any(is.infinite(mat))) {
+    tps_abort("trajectory matrix must not contain infinite values.")
+  }
+  if (length(k) != 1L || is.na(k) || k < 2L || k != as.integer(k)) {
+    tps_abort("k must be one integer >= 2.")
+  }
+  if (length(seed) != 1L || is.na(seed) || !is.finite(seed)) {
+    tps_abort("seed must be one finite value.")
+  }
+  if (length(standardize) != 1L || is.na(standardize)) {
+    tps_abort("standardize must be TRUE or FALSE.")
+  }
 
-  if (isTRUE(standardize)) mat <- .row_standardize(mat)
+  if (isTRUE(standardize)) {
+    mat <- .row_standardize(mat)
+  } else if (any(!is.finite(mat))) {
+    tps_abort("standardize=FALSE requires a fully finite trajectory matrix.")
+  }
   ## drop rows that are all-NA / all-zero after standardize
   keep <- rowSums(abs(mat), na.rm = TRUE) > 0
   mat_fit <- mat[keep, , drop = FALSE]
   if (nrow(mat_fit) < k) tps_abort("Too few non-flat features (%d) for k=%d.",
                                     nrow(mat_fit), k)
 
-  ## local RNG
-  rng_old <- .GlobalEnv$.Random.seed
-  on.exit({
-    if (is.null(rng_old)) rm(".Random.seed", envir = .GlobalEnv)
-    else .GlobalEnv$.Random.seed <- rng_old
-  }, add = TRUE)
-  set.seed(seed)
-
-  if (method == "mfuzz") {
+  withr::with_seed(seed, {
+    if (method == "mfuzz") {
     if (!requireNamespace("Mfuzz", quietly = TRUE) ||
         !requireNamespace("Biobase", quietly = TRUE) ||
         !requireNamespace("e1071", quietly = TRUE)) {
-      tps_abort("method='mfuzz' requires the Mfuzz, Biobase and e1071 ",
-                "packages (in Suggests). Install them or use method='kmeans'.")
-    }
-    ## Mfuzz::mfuzz internally calls a bare cmeans() (unqualified) from e1071.
-    ## In pkgload/testthat environments e1071 must be on the search path.
-    ## We load the namespace and attach via eval to avoid BiocCheck's
-    ## static detection of library()/require() calls in package code.
-    if (!("package:e1071" %in% search())) {
-      loadNamespace("e1071")
-      eval(parse(text = "suppressMessages(library(e1071))"))
+      tps_abort(paste0(
+        "method='mfuzz' requires the Mfuzz, Biobase and e1071 ",
+        "packages (in Suggests). Install them or use method='kmeans'."
+      ))
     }
     eset <- Biobase::ExpressionSet(assayData = mat_fit)
-    m_val <- if (is.character(m) && m == "estimate") {
+    if (!(is.character(m) && length(m) == 1L && identical(m, "estimate")) &&
+        !(is.numeric(m) && length(m) == 1L && !is.na(m) &&
+          is.finite(m) && m > 1)) {
+      tps_abort("m must be 'estimate' or one finite value greater than 1.")
+    }
+    m_val <- if (is.character(m)) {
       as.numeric(Mfuzz::mestimate(eset))
-    } else as.numeric(m)
-    cl <- Mfuzz::mfuzz(eset, c = k, m = m_val)
+    } else {
+      as.numeric(m)
+    }
+    if (length(m_val) != 1L || is.na(m_val) || !is.finite(m_val) || m_val <= 1) {
+      tps_abort("m must be 'estimate' or one finite value greater than 1.")
+    }
+    ## Mfuzz::mfuzz is a thin wrapper around e1071::cmeans but relies on
+    ## e1071 being attached. Call the underlying routine explicitly to avoid
+    ## changing the caller's search path.
+    cl <- e1071::cmeans(Biobase::exprs(eset), centers = k,
+                        method = "cmeans", m = m_val)
     membership <- cl$membership
     rownames(membership) <- rownames(mat_fit)
     cluster <- cl$cluster
     centroids <- t(cl$centers)  # cells x clusters
-  } else {
-    ## kmeans fallback
-    km <- stats::kmeans(mat_fit, centers = k, nstart = 25L)
-    cluster <- km$cluster
-    membership <- NULL
-    centroids <- t(km$centers)  # cells x clusters
-  }
+    } else {
+      ## kmeans fallback
+      km <- stats::kmeans(mat_fit, centers = k, nstart = 25L)
+      cluster <- km$cluster
+      membership <- NULL
+      centroids <- t(km$centers)  # cells x clusters
+    }
 
   ## build full assignment vector (NA for dropped features)
   assignment <- setNames(rep(NA_integer_, nrow(mat)), rownames(mat))
@@ -143,7 +173,8 @@ tps_cluster_trajectories <- function(trajectory, method = c("mfuzz","kmeans"),
     ),
     class = "tps_clusters"
   )
-  out
+    out
+  })
 }
 
 ## ---- cluster QC ------------------------------------------------------------
@@ -189,6 +220,7 @@ tps_cluster_trajectories <- function(trajectory, method = c("mfuzz","kmeans"),
 #' @return a data.frame with one row per K.
 #'
 #' @examples
+#' data(tps_example, package = "timeProtState")
 #' se <- tps_import(tps_example_abundance, tps_example_metadata)
 #' traj <- tps_trajectory_matrix(se)
 #' keval <- tps_evaluate_k(traj, k_range = 3:6, method = "kmeans")
@@ -196,22 +228,41 @@ tps_cluster_trajectories <- function(trajectory, method = c("mfuzz","kmeans"),
 #' @export
 tps_evaluate_k <- function(trajectory, k_range = 2:10, method = "kmeans",
                             seed = 1L, metrics = c("silhouette","within_dispersion")) {
+  method <- match.arg(method, c("mfuzz", "kmeans"))
   metrics <- match.arg(metrics, several.ok = TRUE)
   if (inherits(trajectory, "tps_trajectory")) {
     mat <- .row_standardize(trajectory$unique_cell)
-  } else {
+  } else if (is.matrix(trajectory) && is.numeric(trajectory)) {
     mat <- .row_standardize(trajectory)
+  } else {
+    tps_abort("trajectory must be a tps_trajectory or a numeric matrix.")
   }
+  if (!is.numeric(k_range) || length(k_range) == 0L || anyNA(k_range) ||
+      any(!is.finite(k_range)) || any(k_range < 2) ||
+      any(k_range != as.integer(k_range))) {
+    tps_abort("k_range must contain integers >= 2.")
+  }
+  k_range <- unique(as.integer(k_range))
   keep <- rowSums(abs(mat), na.rm = TRUE) > 0
   mat <- mat[keep, , drop = FALSE]
   rows <- list()
+  failures <- character(0)
   for (k in k_range) {
     if (nrow(mat) < k) next
-    cl_obj <- tryCatch(
-      tps_cluster_trajectories(mat, method = method, k = k, seed = seed,
-                                standardize = FALSE),
-      error = function(e) NULL)
-    if (is.null(cl_obj)) next
+    attempt <- tryCatch(
+      list(
+        value = tps_cluster_trajectories(
+          mat, method = method, k = k, seed = seed, standardize = FALSE
+        ),
+        error = NULL
+      ),
+      error = function(e) list(value = NULL, error = conditionMessage(e))
+    )
+    if (!is.null(attempt$error)) {
+      failures <- c(failures, sprintf("k=%d: %s", k, attempt$error))
+      next
+    }
+    cl_obj <- attempt$value
     assignment <- cl_obj$assignment[!is.na(cl_obj$assignment)]
     row <- list(k = k, method = method,
                 n_clustered = length(assignment),
@@ -228,6 +279,11 @@ tps_evaluate_k <- function(trajectory, k_range = 2:10, method = "kmeans",
       row$mean_silhouette <- mean(sil[, "sil_width"])
     }
     rows[[length(rows) + 1L]] <- as.data.frame(row, stringsAsFactors = FALSE)
+  }
+  if (length(rows) == 0L) {
+    detail <- if (length(failures)) utils::tail(failures, 1L) else
+      "all K exceed feature count"
+    tps_abort("No K evaluation succeeded (%s).", detail)
   }
   do.call(rbind, rows)
 }

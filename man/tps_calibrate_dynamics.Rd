@@ -25,21 +25,17 @@ tps_calibrate_dynamics(
 }
 \value{
 a data.frame with the original dynamics plus a column
-  \code{p_dynamic} (empirical probability of non-null state under null)
-  and \code{q_dynamic} (BH-adjusted).
+  \code{p_dynamic} (empirical trajectory-level p-value) and
+  \code{q_dynamic} (BH-adjusted).
 }
 \description{
-Generates a null distribution of dynamic states by permuting protein
-labels within the calibrated pathway scores, then computes the empirical
-probability that each pathway-condition pair receives a non-null dynamic
-state under the null. This calibrates the CLASSIFICATION DECISION itself,
-not just the underlying NET/REM statistics.
-}
-\details{
-This is the key methodological differentiator: no existing tool calibrates
-pathway-level dynamic state classification. The result tells you whether
-a pathway classified as 'early_directional' is genuinely non-null or could
-arise by chance.
+Permutes protein labels within the calibrated pathway score universe and
+compares each observed pathway-condition trajectory with the permutation
+distribution of its maximum standardized NET/REM evidence across time.
+This trajectory-level test accounts for searching across timepoints and
+both evidence components. The dynamic state remains a descriptive shape
+label; p_dynamic tests departure from the trajectory null, not the
+probability of a particular label.
 }
 \examples{
 data(tps_example, package = "timeProtState")

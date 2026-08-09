@@ -16,7 +16,14 @@
 
 suppressPackageStartupMessages({ library(limma); library(Matrix) })
 
-PROJ <- "C:/Users/11377/Desktop/Msm_dormancy/Msm_dormancy_proteomics"
+workspace_root <- normalizePath(
+  Sys.getenv("TPS_WORKSPACE", unset = getwd()), mustWork = TRUE
+)
+PROJ <- normalizePath(Sys.getenv(
+  "TPS_DORMANCY_PROJECT",
+  unset = file.path(dirname(workspace_root), "Msm_dormancy",
+                    "Msm_dormancy_proteomics")
+), mustWork = TRUE)
 LIMMA_ALL_DIR <- file.path(PROJ, "02_results/04_limma/01_tables_all")
 KEGG_T2G <- file.path(PROJ, "01_data/03_mapping_tables/KEGG_mapping/kegg_pathway2gene.tsv")
 CONTRASTS <- c(endpoint_Acid_t7_vs_baseline = "Acid_day7_vs_Control_ALL.csv",
@@ -63,7 +70,8 @@ MIN_SIZE <- 2L
 EPS <- 1e-12
 pathways <- unique(t2g_sub$term)
 n_path <- length(pathways)
-M <- sparseMatrix(i = integer(0), j = integer(0), dims = c(n_path, length(ids)),
+M <- sparseMatrix(i = integer(0), j = integer(0), x = numeric(0),
+                  dims = c(n_path, length(ids)),
                   dimnames = list(pathways, ids))
 sizes <- integer(n_path)
 for (p in seq_len(n_path)) {
@@ -84,14 +92,23 @@ set.seed(1L)
 n_perm <- 500L
 n_prot <- length(ids)
 obs_net <- NET
-net_null_absmax <- matrix(0.0, nrow(M), ncol(T_MAT))
+net_null_sum <- matrix(0.0, nrow(M), ncol(T_MAT))
 abs_T <- abs(T_MAT)
 for (b in seq_len(n_perm)) {
   idx <- sample.int(n_prot)
   net_b <- as.matrix(Mt %*% T_MAT[idx, , drop = FALSE]) / sizes
-  net_null_absmax <- net_null_absmax + (abs(net_b) >= abs(obs_net) - EPS)
+  net_null_sum <- net_null_sum + net_b
 }
-p_net_oracle <- (net_null_absmax + 1) / (n_perm + 1)
+net_null_mean <- net_null_sum / n_perm
+net_null_ge <- matrix(0.0, nrow(M), ncol(T_MAT))
+set.seed(1L)
+for (b in seq_len(n_perm)) {
+  idx <- sample.int(n_prot)
+  net_b <- as.matrix(Mt %*% T_MAT[idx, , drop = FALSE]) / sizes
+  net_null_ge <- net_null_ge +
+    (abs(net_b - net_null_mean) >= abs(obs_net - net_null_mean) - EPS)
+}
+p_net_oracle <- (net_null_ge + 1) / (n_perm + 1)
 
 golden_pathway <- list(
   statistic_matrix = T_MAT,

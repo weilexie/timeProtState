@@ -36,37 +36,44 @@
 }
 
 ## ---- effect assignment plans ----------------------------------------------
-## returns a data.frame: feature_id, condition, effect_type, amplitude, sign
-.make_plan <- function(n_features, conditions, effect_mix, seed) {
-  ## NOTE: do NOT set.seed here -- the caller (tps_simulate_timecourse) already
-  ## set the seed in a local RNG stream. Re-seeding here would couple the plan
-  ## RNG to the downstream noise RNG in an undocumented way.
+## returns one coherent feature-level effect expanded across conditions.
+.make_plan <- function(n_features, conditions, effect_mix) {
+  ## Do not reset the RNG here: tps_simulate_timecourse already opens a local
+  ## seeded stream. Resetting it would couple the plan and downstream noise in
+  ## an undocumented way.
   rows <- list()
   ## every feature has an entry per condition (null by default)
   eff_types <- names(effect_mix)
   eff_probs <- as.numeric(effect_mix)
   for (i in seq_len(n_features)) {
+    et <- sample(eff_types, size = 1L, prob = eff_probs)
+    amp <- switch(et,
+      null = 0,
+      shared_up = runif(1, 0.8, 2),
+      shared_down = runif(1, 0.8, 2),
+      condition_specific_up = runif(1, 0.8, 2),
+      condition_specific_down = runif(1, 0.8, 2),
+      opposite = runif(1, 0.8, 2),
+      transient = runif(1, 0.8, 1.5),
+      reversal = runif(1, 0.8, 1.5))
+    targeted <- et %in% c("condition_specific_up", "condition_specific_down",
+                           "opposite")
+    target <- if (targeted) sample(conditions, 1L) else NA_character_
+    anchor_sign <- if (et == "opposite") sample(c(-1, 1), 1L) else 1
     for (cc in conditions) {
-      et <- sample(eff_types, size = 1L, prob = eff_probs)
-      amp <- switch(et,
-        null = 0,
-        shared_up = runif(1, 0.8, 2),
-        shared_down = runif(1, 0.8, 2),
-        condition_specific_up = runif(1, 0.8, 2),
-        condition_specific_down = runif(1, 0.8, 2),
-        opposite = runif(1, 0.8, 2),
-        transient = runif(1, 0.8, 1.5),
-        reversal = runif(1, 0.8, 1.5),
-        runif(1, 0.5, 1.5))
       sgn <- switch(et,
-        shared_up = , condition_specific_up = 1,
-        shared_down = , condition_specific_down = -1,
-        opposite = sample(c(-1, 1), 1),
-        1)
+        null = 0,
+        shared_up = 1,
+        shared_down = -1,
+        condition_specific_up = if (cc == target) 1 else 0,
+        condition_specific_down = if (cc == target) -1 else 0,
+        opposite = if (cc == target) anchor_sign else -anchor_sign,
+        transient = 1,
+        reversal = 1)
       rows[[length(rows) + 1L]] <- data.frame(
         feature_id = sprintf("P%04d", i),
         condition = cc, effect_type = et,
-        amplitude = amp, sign = sgn,
+        amplitude = amp, sign = sgn, target_condition = target,
         stringsAsFactors = FALSE)
     }
   }
@@ -74,16 +81,16 @@
 }
 
 ## resolve an effect type + condition context to a per-time function value
-.resolve_effect <- function(effect_type, condition, reference_condition, t, amp, sgn) {
+.resolve_effect <- function(effect_type, t, amp, sgn) {
   base <- switch(effect_type,
     null = .f_null(t),
-    shared_up = .f_monotonic(t, amp),
-    shared_down = -.f_monotonic(t, amp),
-    transient = .f_transient(t, amp),
-    reversal = .f_reversal(t, amp),
-    condition_specific_up = if (condition == reference_condition) .f_monotonic(t, amp) else .f_null(t),
-    condition_specific_down = if (condition == reference_condition) -.f_monotonic(t, amp) else .f_null(t),
-    opposite = if (condition == reference_condition) sgn * .f_monotonic(t, amp) else -sgn * .f_monotonic(t, amp),
+    shared_up = sgn * .f_monotonic(t, amp),
+    shared_down = sgn * .f_monotonic(t, amp),
+    condition_specific_up = sgn * .f_monotonic(t, amp),
+    condition_specific_down = sgn * .f_monotonic(t, amp),
+    opposite = sgn * .f_monotonic(t, amp),
+    transient = sgn * .f_transient(t, amp),
+    reversal = sgn * .f_reversal(t, amp),
     .f_null(t))
   base
 }
@@ -145,30 +152,61 @@ tps_simulate_timecourse <- function(n_features = 200L,
                        noise_sd = noise_sd, missingness = missingness,
                        seed = seed,
                        timestamp = format(Sys.time(), "%Y-%m-%dT%H:%M:%S%z"))
-  if (n_features < 1L) tps_abort("n_features must be >= 1.")
-  if (length(conditions) < 1L) tps_abort("Need at least 1 condition.")
-  if (length(times) < 2L) tps_abort("Need at least 2 non-baseline timepoints.")
-  if (n_replicates < 1L) tps_abort("n_replicates must be >= 1.")
+  if (length(n_features) != 1L || is.na(n_features) || n_features < 1L ||
+      n_features != as.integer(n_features)) {
+    tps_abort("n_features must be one positive integer.")
+  }
+  if (!is.character(conditions) || length(conditions) < 1L ||
+      anyNA(conditions) || any(!nzchar(conditions)) || anyDuplicated(conditions)) {
+    tps_abort("conditions must be unique, non-empty character values.")
+  }
+  if (!is.numeric(times) || length(times) < 2L || any(!is.finite(times)) ||
+      any(times <= 0) || anyDuplicated(times)) {
+    tps_abort("times must contain at least 2 unique, positive finite values.")
+  }
+  times <- sort(times)
+  if (length(n_replicates) != 1L || is.na(n_replicates) ||
+      n_replicates < 1L || n_replicates != as.integer(n_replicates)) {
+    tps_abort("n_replicates must be one positive integer.")
+  }
+  allowed_effects <- c("null", "shared_up", "shared_down",
+                       "condition_specific_up", "condition_specific_down",
+                       "opposite", "transient", "reversal")
+  if (!is.numeric(effect_mix) || is.null(names(effect_mix)) ||
+      any(!nzchar(names(effect_mix))) || anyDuplicated(names(effect_mix)) ||
+      any(!is.finite(effect_mix)) || any(effect_mix < 0)) {
+    tps_abort("effect_mix must be a named, non-negative finite numeric vector.")
+  }
   if (abs(sum(effect_mix) - 1) > 1e-6) {
     tps_abort("effect_mix probabilities must sum to 1 (got %.4f).", sum(effect_mix))
   }
-  if (missingness < 0 || missingness > 1) tps_abort("missingness must be in [0,1].")
+  if (!all(names(effect_mix) %in% allowed_effects)) {
+    tps_abort("effect_mix contains unsupported effect type(s): %s.",
+              paste(setdiff(names(effect_mix), allowed_effects), collapse = ", "))
+  }
+  if (length(conditions) < 2L && "opposite" %in% names(effect_mix) &&
+      effect_mix[["opposite"]] > 0) {
+    tps_abort("effect type 'opposite' requires at least two conditions.")
+  }
+  if (length(noise_sd) != 1L || is.na(noise_sd) || !is.finite(noise_sd) ||
+      noise_sd < 0) {
+    tps_abort("noise_sd must be one non-negative finite value.")
+  }
+  if (length(missingness) != 1L || is.na(missingness) ||
+      !is.finite(missingness) || missingness < 0 || missingness > 1) {
+    tps_abort("missingness must be in [0,1].")
+  }
+  if (length(seed) != 1L || is.na(seed) || !is.finite(seed)) {
+    tps_abort("seed must be one finite value.")
+  }
 
-  ## local RNG stream (does not perturb global .Random.seed)
-  rng_old <- .GlobalEnv$.Random.seed
-  on.exit({
-    if (is.null(rng_old)) rm(".Random.seed", envir = .GlobalEnv)
-    else .GlobalEnv$.Random.seed <- rng_old
-  }, add = TRUE)
-  set.seed(seed)
-
-  ## baseline time = 0 (relative); the shared baseline
-  baseline_time <- 0
+  withr::with_seed(seed, {
+    ## baseline time = 0 (relative); the shared baseline
+    baseline_time <- 0
   all_times <- c(baseline_time, times)
 
   ## truth plan: per feature per condition
-  ref_cond <- conditions[1L]
-  plan <- .make_plan(n_features, conditions, effect_mix, seed)
+  plan <- .make_plan(n_features, conditions, effect_mix)
 
   ## baseline abundance per feature
   mu0 <- stats::rnorm(n_features, mean = 18, sd = 4)
@@ -218,7 +256,7 @@ tps_simulate_timecourse <- function(n_features = 200L,
         pr <- plan[plan$feature_id == feat_id & plan$condition == cc, ]
         ## pass the FULL time grid so shape functions (esp. reversal/transient)
         ## normalize correctly; then extract the current timepoint's value.
-        eff <- .resolve_effect(pr$effect_type, cc, ref_cond, all_times,
+        eff <- .resolve_effect(pr$effect_type, all_times,
                                pr$amplitude, pr$sign)
         eff_val <- eff[match(tt, all_times)]
         abundance[i, j] <- mu0[i] + eff_val + stats::rnorm(1, sd = noise_sd)
@@ -233,7 +271,7 @@ tps_simulate_timecourse <- function(n_features = 200L,
     abundance[miss_idx] <- NA
   }
 
-  structure(
+    structure(
     list(
       abundance = abundance,
       col_data = col_data,
@@ -246,7 +284,8 @@ tps_simulate_timecourse <- function(n_features = 200L,
       provenance = list(.make_provenance(arg_capture, list(), stage = "simulate"))
     ),
     class = "tps_simulation"
-  )
+    )
+  })
 }
 
 ## ---- methods ---------------------------------------------------------------
@@ -314,7 +353,18 @@ tps_inject_pathway_effect <- function(sim, term2gene, term,
     tps_abort("condition '%s' not in simulation conditions (%s).",
               condition, paste(sim$config$conditions, collapse = ", "))
   }
-  members <- term2gene$gene[term2gene$term == term]
+  if (!is.data.frame(term2gene) ||
+      !all(c("term", "gene") %in% names(term2gene))) {
+    tps_abort("term2gene must have columns 'term' and 'gene'.")
+  }
+  if (length(term) != 1L || is.na(term) || !nzchar(term)) {
+    tps_abort("term must be one non-empty value.")
+  }
+  if (length(amplitude) != 1L || is.na(amplitude) || !is.finite(amplitude) ||
+      amplitude <= 0) {
+    tps_abort("amplitude must be one positive finite value.")
+  }
+  members <- unique(as.character(term2gene$gene[term2gene$term == term]))
   ## map to feature ids present in the simulation
   feat_ids <- rownames(sim$abundance)
   members_in_sim <- intersect(members, feat_ids)
@@ -342,7 +392,8 @@ tps_inject_pathway_effect <- function(sim, term2gene, term,
     },
     delayed_opposition = {
       v <- rep(0, length(all_times))
-      v[length(all_times)] <- amplitude  # only last timepoint, same direction
+      if (length(all_times) > 2L) v[2:(length(all_times) - 1L)] <- -amplitude
+      v[length(all_times)] <- amplitude
       v
     },
     rep(0, length(all_times))
@@ -370,9 +421,15 @@ tps_inject_pathway_effect <- function(sim, term2gene, term,
   inj <- data.frame(
     feature_id = members_in_sim, condition = condition,
     effect_type = paste0("injected_", effect_type),
-    amplitude = amplitude, sign = 1,
+    amplitude = amplitude, sign = 1, target_condition = condition,
     stringsAsFactors = FALSE)
   sim$truth <- rbind(sim$truth, inj)
+  sim$provenance[[length(sim$provenance) + 1L]] <- .make_provenance(
+    list(call = "tps_inject_pathway_effect", term = term,
+         effect_type = effect_type, condition = condition,
+         amplitude = amplitude,
+         timestamp = format(Sys.time(), "%Y-%m-%dT%H:%M:%S%z")),
+    sim, stage = "inject_pathway_effect")
 
   sim
 }

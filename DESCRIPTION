@@ -16,7 +16,6 @@ Description: Provides an auditable framework for shared-baseline,
     clustering, simulation for benchmarks, and structured export.
 License: Artistic-2.0 | file LICENSE
 Encoding: UTF-8
-LazyData: true
 Depends:
     R (>= 4.5.0)
 Imports:
@@ -27,7 +26,8 @@ Imports:
     S4Vectors,
     limma,
     Matrix,
-    rlang
+    rlang,
+    withr
 Suggests:
     testthat (>= 3.0.0),
     knitr,
@@ -40,7 +40,5 @@ Suggests:
     ggplot2
 VignetteBuilder: knitr
 Config/testthat/edition: 3
-URL: https://github.com/weilexie/timeProtState
-BugReports: https://github.com/weilexie/timeProtState/issues
-biocViews: Proteomics, TimeCourse, DifferentialExpression, Software
+biocViews: Proteomics, TimeCourse, DifferentialExpression, Clustering, Software
 RoxygenNote: 7.3.3

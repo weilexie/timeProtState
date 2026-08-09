@@ -6,3 +6,5 @@ vignettes/*.R
 inst/doc/
 nul
 timeProtState.BiocCheck/
+README.html
+README.md

@@ -36,8 +36,18 @@
 tps_decision_rule <- function(significance = c("adj.P.Val", "P.Value"),
                                 alpha = 0.05, lfc_threshold = 0, endpoint = NULL) {
   significance <- match.arg(significance)
-  if (alpha <= 0 || alpha >= 1) tps_abort("alpha must be in (0,1).")
-  if (lfc_threshold < 0) tps_abort("lfc_threshold must be >= 0.")
+  if (length(alpha) != 1L || !is.numeric(alpha) || is.na(alpha) ||
+      !is.finite(alpha) || alpha <= 0 || alpha >= 1) {
+    tps_abort("alpha must be in (0,1) and supplied as one finite value.")
+  }
+  if (length(lfc_threshold) != 1L || !is.numeric(lfc_threshold) ||
+      is.na(lfc_threshold) || !is.finite(lfc_threshold) || lfc_threshold < 0) {
+    tps_abort("lfc_threshold must be one non-negative finite value.")
+  }
+  if (!is.null(endpoint) &&
+      (length(endpoint) != 1L || is.na(endpoint) || !is.finite(endpoint))) {
+    tps_abort("endpoint must be NULL or one finite value.")
+  }
   structure(
     list(significance = significance, alpha = alpha,
          lfc_threshold = lfc_threshold, endpoint = endpoint),
@@ -69,6 +79,7 @@ tps_decision_rule <- function(significance = c("adj.P.Val", "P.Value"),
 #'   axes + final state), \code{rule_manifest}, and \code{provenance}.
 #'
 #' @examples
+#' data(tps_example, package = "timeProtState")
 #' se <- tps_import(tps_example_abundance, tps_example_metadata)
 #' design <- tps_make_design(se)
 #' contrasts <- tps_make_contrasts(design, endpoint = 7)
@@ -80,6 +91,14 @@ tps_decision_rule <- function(significance = c("adj.P.Val", "P.Value"),
 tps_classify_states <- function(fit, rule = NULL) {
   if (!inherits(fit, "tps_fit")) tps_abort("fit must be a tps_fit object.")
   if (is.null(rule)) rule <- tps_decision_rule()
+  if (!inherits(rule, "tps_decision_rule")) {
+    tps_abort("rule must be a tps_decision_rule object.")
+  }
+  if (!is.null(rule$endpoint) &&
+      !identical(as.character(rule$endpoint),
+                 as.character(fit$contrasts$endpoint))) {
+    tps_abort("rule endpoint does not match the fitted endpoint; rebuild contrasts and refit.")
+  }
   arg_capture <- list(call = "tps_classify_states",
                        rule = rule,
                        timestamp = format(Sys.time(), "%Y-%m-%dT%H:%M:%S%z"))
@@ -100,7 +119,7 @@ tps_classify_states <- function(fit, rule = NULL) {
 
   ## ---- axis 3: direction_pattern (from endpoint family) -----------------
   end_rows <- stats[stats$family == "endpoint" & stats$test == "t", ]
-  end_dir <- .endpoint_directions(end_rows, conditions, rule)
+  end_dir <- .endpoint_directions(end_rows, rule)
 
   ## ---- reversal detection (from vs_baseline family) ---------------------
   ## A temporal reversal = within a condition, significant vs-baseline logFC
@@ -118,8 +137,14 @@ tps_classify_states <- function(fit, rule = NULL) {
     stringsAsFactors = FALSE)
   ## join endpoint directions per condition
   for (cond in conditions) {
-    st[[paste0("endpoint_dir_", cond)]] <- end_dir$dir[match(st$feature_id, end_dir$feature_id)]
-    st[[paste0("endpoint_sig_", cond)]] <- end_dir$sig[match(st$feature_id, end_dir$feature_id)]
+    by_condition <- end_dir[end_dir$condition == cond, , drop = FALSE]
+    idx <- match(st$feature_id, by_condition$feature_id)
+    direction <- by_condition$dir[idx]
+    supported <- by_condition$sig[idx]
+    direction[is.na(direction)] <- "ns"
+    supported[is.na(supported)] <- FALSE
+    st[[paste0("endpoint_dir_", cond)]] <- direction
+    st[[paste0("endpoint_sig_", cond)]] <- supported
   }
   st$direction_pattern <- .axis_direction(st, conditions)
   st$is_reversal <- reversal[match(st$feature_id, names(reversal))]
@@ -150,13 +175,18 @@ tps_classify_states <- function(fit, rule = NULL) {
 
 ## ---- axis helpers ---------------------------------------------------------
 .sig_per_feature <- function(rows, rule) {
-  if (nrow(rows) == 0L) return(character(0))
+  if (nrow(rows) == 0L) {
+    return(setNames(logical(0), character(0)))
+  }
   sig_col <- rule$significance
   hit <- !is.na(rows[[sig_col]]) & rows[[sig_col]] < rule$alpha
   if (rule$lfc_threshold > 0 && "logFC" %in% names(rows)) {
-    hit <- hit & !is.na(rows$logFC) & abs(rows$logFC) >= rule$lfc_threshold
+    ## Omnibus F rows have no single logFC; the effect-size gate applies only
+    ## where a directional coefficient is defined.
+    hit <- hit & (is.na(rows$logFC) | abs(rows$logFC) >= rule$lfc_threshold)
   }
-  setNames(hit, rows$feature_id)
+  by_feature <- split(hit, rows$feature_id)
+  vapply(by_feature, any, logical(1L), na.rm = TRUE)
 }
 
 .axis_temporal <- function(features, tmp_avg, tmp_within) {
@@ -166,18 +196,19 @@ tps_classify_states <- function(fit, rule = NULL) {
           ifelse(a, "average_time",
           ifelse(w, "within_condition", "none")))
   out[is.na(out)] <- "none"
-  out
+  unname(out)
 }
 
 .axis_heterogeneity <- function(features, het) {
   h <- het[features]; h[is.na(h)] <- FALSE
-  ifelse(h, "condition_dependent", "homogeneous_or_unresolved")
+  unname(ifelse(h, "condition_dependent", "homogeneous_or_unresolved"))
 }
 
-.endpoint_directions <- function(end_rows, conditions, rule) {
+.endpoint_directions <- function(end_rows, rule) {
   if (nrow(end_rows) == 0L) {
     return(data.frame(feature_id = character(0),
-                      dir = character(0), sig = logical(0)))
+                      condition = character(0), dir = character(0),
+                      sig = logical(0)))
   }
   dir <- sig <- rep(NA, nrow(end_rows))
   for (i in seq_len(nrow(end_rows))) {
@@ -189,15 +220,23 @@ tps_classify_states <- function(fit, rule = NULL) {
       dir[i] <- "ns"
     }
   }
-  data.frame(feature_id = end_rows$feature_id, dir = dir, sig = sig,
+  parsed <- .parse_endpoint_contrast(end_rows$contrast)
+  data.frame(feature_id = end_rows$feature_id, condition = parsed$condition,
+             dir = dir, sig = sig,
              stringsAsFactors = FALSE)
+}
+
+.parse_endpoint_contrast <- function(contrast_names) {
+  base <- sub("^endpoint_", "", contrast_names)
+  base <- sub("_vs_baseline$", "", base)
+  condition <- sub("_t[^_]+$", "", base)
+  time <- suppressWarnings(as.numeric(sub("^.*_t", "", base)))
+  list(condition = condition, time = time)
 }
 
 .axis_direction <- function(st, conditions) {
   cols <- paste0("endpoint_dir_", conditions)
   dirs <- as.data.frame(st[, cols, drop = FALSE])
-  sig_cols <- paste0("endpoint_sig_", conditions)
-  sigs <- as.data.frame(st[, sig_cols, drop = FALSE])
   apply(dirs, 1L, function(d) {
     ds <- d[d != "ns"]
     if (length(ds) == 0L) return("no_supported_change")
@@ -244,7 +283,7 @@ tps_classify_states <- function(fit, rule = NULL) {
   ## Use regex (consistent with .parse_contrast_time in pathway-dynamics.R)
   ## to handle condition names containing "_t<digits>" patterns.
   base <- sub("_vs_baseline$", "", contrast_names)
-  condition <- sub("_t[0-9.]+$", "", base)
+  condition <- sub("_t[^_]+$", "", base)
   time_str <- sub("^.*_t", "", base)
   time <- suppressWarnings(as.numeric(time_str))
   list(condition = condition, time = time)
@@ -301,6 +340,7 @@ print.tps_states <- function(x, ...) {
 #'   the combined \code{state} label.
 #'
 #' @examples
+#' data(tps_example, package = "timeProtState")
 #' se <- tps_import(tps_example_abundance, tps_example_metadata)
 #' design <- tps_make_design(se)
 #' contrasts <- tps_make_contrasts(design, endpoint = 7)

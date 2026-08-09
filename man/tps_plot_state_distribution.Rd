@@ -17,6 +17,7 @@ Produces a ggplot bar chart of protein-level state counts (from
 \code{\link{tps_classify_states}}).
 }
 \examples{
+data(tps_example, package = "timeProtState")
 se <- tps_import(tps_example_abundance, tps_example_metadata)
 design <- tps_make_design(se)
 contrasts <- tps_make_contrasts(design, endpoint = 7)
