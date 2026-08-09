@@ -2,11 +2,11 @@ citHeader("To cite timeProtState in publications use:")
 
 citEntry(
   entry = "Misc",
-  title = "timeProtState: contrast-aware dynamic and pathway remodeling state analysis for time-course proteomics",
-  author = person("timeProtState", "authors"),
+  title = "timeProtState: contrast-aware pathway remodeling dynamics for time-course proteomics",
+  author = person(given = "Weile", family = "Xie"),
   year = 2026,
   note = "R package version 0.99.0",
-  textVersion = paste("timeProtState authors (2026).",
-    "timeProtState: contrast-aware dynamic and pathway remodeling state",
-    "analysis for time-course proteomics. R package version 0.99.0.")
+  textVersion = paste("Weile Xie (2026).",
+    "timeProtState: contrast-aware pathway remodeling dynamics",
+    "for time-course proteomics. R package version 0.99.0.")
 )

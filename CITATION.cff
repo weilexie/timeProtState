@@ -1,13 +1,14 @@
 cff-version: 1.2.0
 message: "If you use this software, please cite it as below."
-title: "timeProtState: contrast-aware dynamic and pathway remodeling state analysis for time-course proteomics"
+title: "timeProtState: contrast-aware pathway remodeling dynamics for time-course proteomics"
 authors:
-  - family-names: "timeProtState"
-    given-names: "authors"
+  - family-names: "Xie"
+    given-names: "Weile"
+    email: "weile.xie@outlook.com"
 version: "0.99.0"
-date-released: "2026-08-06"
+date-released: "2026-08-08"
 license: Artistic-2.0
-repository-code: "https://github.com/timeProtState/timeProtState"
+repository-code: "https://github.com/weilexie/timeProtState"
 keywords:
   - proteomics
   - time-course

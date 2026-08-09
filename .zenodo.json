@@ -1,11 +1,12 @@
 {
-  "title": "timeProtState R package",
-  "description": "Contrast-aware dynamic and pathway remodeling state analysis for time-course proteomics. R/Bioconductor package.",
-  "creators": [{"name": "timeProtState authors"}],
-  "keywords": ["proteomics","time-course","shared baseline","contrast analysis","pathway remodeling","Bioconductor","limma","permutation"],
+  "title": "timeProtState: contrast-aware pathway remodeling dynamics for time-course proteomics",
+  "description": "R/Bioconductor package that constructs rank-audited contrast families from shared-baseline time-course designs and uses moderated statistics to compute pathway-level NET/REM/COH scores with permutation calibration and temporal dynamic classification.",
+  "creators": [{"name": "Xie, Weile", "affiliation": "Tsinghua University"}],
+  "keywords": ["proteomics","time-course","shared baseline","contrast analysis","pathway remodeling","Bioconductor","limma","permutation","NET REM COH","dynamic classification"],
   "license": "Artistic-2.0",
   "access_right": "open",
   "upload_type": "software",
   "language": "eng",
-  "communities": [{"identifier": "bioconductor"}]
+  "communities": [{"identifier": "bioconductor"}],
+  "related_identifiers": [{"identifier": "https://github.com/weilexie/timeProtState", "relation": "isSupplementTo"}]
 }
