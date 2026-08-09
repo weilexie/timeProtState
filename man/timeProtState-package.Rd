@@ -11,12 +11,12 @@ Provides an auditable framework for shared-baseline, multi-condition time-course
 \seealso{
 Useful links:
 \itemize{
-  \item \url{https://github.com/timeProtState/timeProtState}
-  \item Report bugs at \url{https://github.com/timeProtState/timeProtState/issues}
+  \item \url{https://github.com/weilexie/timeProtState}
+  \item Report bugs at \url{https://github.com/weilexie/timeProtState/issues}
 }
 
 }
 \author{
-\strong{Maintainer}: Given Family \email{maintainer@example.org}
+\strong{Maintainer}: Weile Xie \email{weile.xie@outlook.com}
 
 }
