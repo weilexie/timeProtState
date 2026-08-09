@@ -297,7 +297,7 @@ tps_plot_state_distribution <- function(states) {
 #'                            id_col = "locus_tag", family = "vs_baseline")
 #' ave <- rep(1, nrow(pws$statistic_matrix))
 #' pws_c <- tps_calibrate_pathways(pws, abundance = ave, n_perm = 10, seed = 1)
-#' tps_plot_pathway_states(tps_classify_pathways(pws_c))
+#' tps_plot_pathway_trajectory(pws_c, term = rownames(pws_c$scores$NET)[1])
 #' @export
 tps_plot_pathway_trajectory <- function(calibrated, term,
                                          metric = c("NET", "REM", "COH"),

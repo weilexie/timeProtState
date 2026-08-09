@@ -379,7 +379,16 @@ tps_inject_pathway_effect <- function(sim, term2gene, term,
   ## define the effect shape over all_times
   shape <- switch(effect_type,
     early_directional = rep(amplitude, length(all_times)),
-    gradual_remodeling = amplitude * seq(0, 1, length.out = length(all_times)),
+    gradual_remodeling = {
+      ## REM increases over time; t1 has NO signal (distinguishes from early_directional)
+      v <- rep(0, length(all_times))
+      for (k in 2:length(all_times)) {
+        v[k] <- amplitude * (k - 1) / (length(all_times) - 1)
+      }
+      v[1] <- 0  # baseline: no effect
+      v[2] <- 0  # t1: no effect (signal starts from t2)
+      v
+    },
     transient_burst = {
       v <- rep(0, length(all_times))
       ## peak at the true middle non-baseline timepoint

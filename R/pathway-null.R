@@ -98,7 +98,6 @@
 #'                            id_col = "locus_tag", family = "vs_baseline")
 #' ave <- rep(1, nrow(pws$statistic_matrix))
 #' pws_c <- tps_calibrate_pathways(pws, abundance = ave, n_perm = 10, seed = 1)
-#' tps_calibrate_pathways(pws, abundance = ave, n_perm = 10, seed = 1)
 tps_calibrate_pathways <- function(scores, abundance = NULL, n_perm = 1000L,
                                     mode = c("abundance_stratified","unstratified"),
                                     n_bins = 4L, seed = 1L,

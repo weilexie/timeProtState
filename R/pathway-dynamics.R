@@ -51,7 +51,7 @@
   if (n >= 3L) {
     rem_mid <- rem[seq(2L, n - 1L)]
     sig_rem_mid <- sig_rem[seq(2L, n - 1L)]
-    mid_max <- max(rem_mid, na.rm = TRUE)
+    mid_max <- if (any(is.finite(rem_mid))) max(rem_mid, na.rm = TRUE) else -Inf
     if (any(sig_rem_mid) &&
         isTRUE(mid_max > rem_n * 1.5) &&
         isTRUE(mid_max > rem_1 * 1.5)) {
@@ -74,19 +74,23 @@
     return("directional_delayed")
   }
 
-  ## gradual_remodeling: REM increases over time, signal builds progressively.
-  if (n >= 2L && isTRUE(rem_n > rem_1) && isTRUE(sig_rem[n]) &&
-      isTRUE(rem_n > rem_1 * 1.2)) {
-    return("gradual_remodeling")
-  }
-
   ## early_directional: first timepoint NET-significant with high COH and a
-  ## persistent, directionally consistent signal.
+  ## persistent, directionally consistent signal. Checked BEFORE gradual_remodeling
+  ## so that a growing coherent directional signal is labeled early_directional,
+  ## not gradual_remodeling (which is for non-directional REM growth).
   sig_net <- net[sig & !is.na(net)]
   same_direction <- length(sig_net) >= 2L &&
     length(unique(sign(sig_net[sign(sig_net) != 0]))) == 1L
   if (isTRUE(sig[1L]) && isTRUE(coh_1 >= coh_cut) && same_direction) {
     return("early_directional")
+  }
+
+  ## gradual_remodeling: REM increases over time, signal builds progressively.
+  ## Only reached if early_directional did not fire (i.e., NOT a coherent
+  ## directional signal from the start).
+  if (n >= 2L && isTRUE(rem_n > rem_1) && isTRUE(sig_rem[n]) &&
+      isTRUE(rem_n > rem_1 * 1.2)) {
+    return("gradual_remodeling")
   }
 
   ## any significant NET -- directional but not early
@@ -301,7 +305,8 @@ tps_classify_pathway_dynamics <- function(calibrated, alpha = 0.05, coh_cut = 0.
 #'                            id_col = "locus_tag", family = "vs_baseline")
 #' ave <- rep(1, nrow(pws$statistic_matrix))
 #' pws_c <- tps_calibrate_pathways(pws, abundance = ave, n_perm = 10, seed = 1)
-#' tps_classify_pathway_dynamics(pws_c)
+#' dyn <- tps_classify_pathway_dynamics(pws_c)
+#' link <- tps_link_states_pathways(tps_classify_states(fit), dyn, tps_example_term2gene)
 #' @export
 tps_link_states_pathways <- function(states, pathway_dynamics, term2gene,
                                       protein_ids = NULL) {
@@ -470,7 +475,8 @@ tps_link_states_pathways <- function(states, pathway_dynamics, term2gene,
 #'                            id_col = "locus_tag", family = "vs_baseline")
 #' ave <- rep(1, nrow(pws$statistic_matrix))
 #' pws_c <- tps_calibrate_pathways(pws, abundance = ave, n_perm = 10, seed = 1)
-#' tps_classify_pathway_dynamics(pws_c)
+#' dyn <- tps_classify_pathway_dynamics(pws_c)
+#' div <- tps_divergence_score(pws_c, dyn)
 #' @export
 tps_divergence_score <- function(calibrated, dyn = NULL, alpha = 0.05) {
   if (!inherits(calibrated, "tps_pathway_calibrated")) {
@@ -551,7 +557,7 @@ tps_divergence_score <- function(calibrated, dyn = NULL, alpha = 0.05) {
 #'                            id_col = "locus_tag", family = "vs_baseline")
 #' ave <- rep(1, nrow(pws$statistic_matrix))
 #' pws_c <- tps_calibrate_pathways(pws, abundance = ave, n_perm = 10, seed = 1)
-#' tps_classify_pathway_dynamics(pws_c)
+#' dyn_cal <- tps_calibrate_dynamics(pws_c, n_perm = 10, seed = 1)
 #' @export
 tps_calibrate_dynamics <- function(calibrated, n_perm = 500L, alpha = 0.05,
                                     coh_cut = 0.5, seed = 1L) {

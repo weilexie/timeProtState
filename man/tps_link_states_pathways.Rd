@@ -49,5 +49,6 @@ pws <- tps_pathway_scores(fit, tps_example_term2gene,
                            id_col = "locus_tag", family = "vs_baseline")
 ave <- rep(1, nrow(pws$statistic_matrix))
 pws_c <- tps_calibrate_pathways(pws, abundance = ave, n_perm = 10, seed = 1)
-tps_classify_pathway_dynamics(pws_c)
+dyn <- tps_classify_pathway_dynamics(pws_c)
+link <- tps_link_states_pathways(tps_classify_states(fit), dyn, tps_example_term2gene)
 }
