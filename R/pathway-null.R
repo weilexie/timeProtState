@@ -71,24 +71,19 @@
 #'   pathway x contrast tests (more conservative for multi-timepoint designs).
 #' @return a list of class \code{tps_pathway_calibrated} extending the input
 #'   with \code{p_net}, \code{p_rem}, \code{q_net}, \code{q_rem}, null summaries.
-#'
+#' @export
 #' @examples
-#' \dontrun{
+#' data(tps_example, package = "timeProtState")
 #' se <- tps_import(tps_example_abundance, tps_example_metadata,
 #'                  tps_example_annotation)
 #' design <- tps_make_design(se)
 #' contrasts <- tps_make_contrasts(design, endpoint = 7)
 #' fit <- tps_fit(se, design, contrasts)
 #' pws <- tps_pathway_scores(fit, tps_example_term2gene,
-#'                            id_col = "locus_tag", family = "endpoint")
-#' end_stats <- tps_results(fit, family = "endpoint")
-#' ave <- as.numeric(tapply(end_stats$AveExpr,
-#'     factor(end_stats$feature_id, levels = rownames(pws$statistic_matrix)),
-#'     function(x) x[1]))
-#' pws_c <- tps_calibrate_pathways(pws, abundance = ave, n_perm = 200, seed = 1)
-#' }
-#'
-#' @export
+#'                            id_col = "locus_tag", family = "vs_baseline")
+#' ave <- rep(1, nrow(pws$statistic_matrix))
+#' pws_c <- tps_calibrate_pathways(pws, abundance = ave, n_perm = 10, seed = 1)
+#' tps_calibrate_pathways(pws, abundance = ave, n_perm = 10, seed = 1)
 tps_calibrate_pathways <- function(scores, abundance = NULL, n_perm = 1000L,
                                     mode = c("abundance_stratified","unstratified"),
                                     n_bins = 4L, seed = 1L,
@@ -227,12 +222,17 @@ tps_calibrate_pathways <- function(scores, abundance = NULL, n_perm = 1000L,
 #'   term, contrast, size, NET, REM, COH, q_net, q_rem, state.
 #'
 #' @examples
-#' \dontrun{
-#' pws_c <- tps_calibrate_pathways(pws, abundance = ave, n_perm = 200)
-#' states <- tps_classify_pathways(pws_c)
-#' head(states)
-#' }
-#'
+#' data(tps_example, package = "timeProtState")
+#' se <- tps_import(tps_example_abundance, tps_example_metadata,
+#'                  tps_example_annotation)
+#' design <- tps_make_design(se)
+#' contrasts <- tps_make_contrasts(design, endpoint = 7)
+#' fit <- tps_fit(se, design, contrasts)
+#' pws <- tps_pathway_scores(fit, tps_example_term2gene,
+#'                            id_col = "locus_tag", family = "vs_baseline")
+#' ave <- rep(1, nrow(pws$statistic_matrix))
+#' pws_c <- tps_calibrate_pathways(pws, abundance = ave, n_perm = 10, seed = 1)
+#' tps_calibrate_pathways(pws, abundance = ave, n_perm = 10, seed = 1)
 #' @export
 tps_classify_pathways <- function(calibrated, alpha = 0.05, coh_cut = 0.5) {
   if (!inherits(calibrated, "tps_pathway_calibrated")) {

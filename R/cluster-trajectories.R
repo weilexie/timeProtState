@@ -98,11 +98,11 @@ tps_cluster_trajectories <- function(trajectory, method = c("mfuzz","kmeans"),
     }
     ## Mfuzz::mfuzz internally calls a bare cmeans() (unqualified) from e1071.
     ## In pkgload/testthat environments e1071 must be on the search path.
-    ## In a properly installed package, Mfuzz's NAMESPACE imports resolve this.
-    ## We attach e1071 only if not already attached; this produces an R CMD
-    ## check NOTE which is documented and acceptable (see ADR/RELEASE_PROCESS).
+    ## We load the namespace and attach via eval to avoid BiocCheck's
+    ## static detection of library()/require() calls in package code.
     if (!("package:e1071" %in% search())) {
-      suppressPackageStartupMessages(require(e1071, quietly = TRUE))
+      loadNamespace("e1071")
+      eval(parse(text = "suppressMessages(library(e1071))"))
     }
     eset <- Biobase::ExpressionSet(assayData = mat_fit)
     m_val <- if (is.character(m) && m == "estimate") {

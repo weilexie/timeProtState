@@ -38,13 +38,15 @@ trajectory, clusters, pathway scores/states) to a structured directory,
 along with a manifest recording provenance and software versions.
 }
 \examples{
-\dontrun{
-se <- tps_import(tps_example_abundance, tps_example_metadata)
+data(tps_example, package = "timeProtState")
+se <- tps_import(tps_example_abundance, tps_example_metadata,
+                 tps_example_annotation)
 design <- tps_make_design(se)
 contrasts <- tps_make_contrasts(design, endpoint = 7)
 fit <- tps_fit(se, design, contrasts)
-states <- tps_classify_states(fit)
-tps_export(tempdir(), fit = fit, states = states)
-}
-
+pws <- tps_pathway_scores(fit, tps_example_term2gene,
+                           id_col = "locus_tag", family = "vs_baseline")
+ave <- rep(1, nrow(pws$statistic_matrix))
+pws_c <- tps_calibrate_pathways(pws, abundance = ave, n_perm = 10, seed = 1)
+tps_export(tempdir(), fit = fit, states = tps_classify_states(fit))
 }

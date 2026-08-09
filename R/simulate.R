@@ -38,7 +38,7 @@
 ## ---- effect assignment plans ----------------------------------------------
 ## returns a data.frame: feature_id, condition, effect_type, amplitude, sign
 .make_plan <- function(n_features, conditions, effect_mix, seed) {
-  ## NOTE: do NOT set.seed here — the caller (tps_simulate_timecourse) already
+  ## NOTE: do NOT set.seed here -- the caller (tps_simulate_timecourse) already
   ## set the seed in a local RNG stream. Re-seeding here would couple the plan
   ## RNG to the downstream noise RNG in an undocumented way.
   rows <- list()
@@ -294,14 +294,11 @@ print.tps_simulation <- function(x, ...) {
 #' @return a modified \code{tps_simulation} object.
 #'
 #' @examples
-#' \dontrun{
-#' sim <- tps_simulate_timecourse(n_features = 100, seed = 1)
-#' sim2 <- tps_inject_pathway_effect(sim, tps_example_term2gene,
-#'                                    term = "org20001",
-#'                                    effect_type = "transient_burst",
-#'                                    condition = "Acid")
-#' }
-#'
+#' sim <- tps_simulate_timecourse(n_features = 50, seed = 1)
+#' t2g_sim <- data.frame(term = "pw1", gene = paste0("P", sprintf("%04d", 1:10)),
+#'                       stringsAsFactors = FALSE)
+#' sim2 <- tps_inject_pathway_effect(sim, t2g_sim, term = "pw1",
+#'   effect_type = "early_directional", condition = "Acid")
 #' @export
 tps_inject_pathway_effect <- function(sim, term2gene, term,
                                        effect_type = c("early_directional",

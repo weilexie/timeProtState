@@ -38,10 +38,15 @@ pathway-level remodeling axes bidirectionally, enabling diagnoses like:
 "do temporal-reversal proteins cluster in transient-burst pathways?"
 }
 \examples{
-\dontrun{
-dyn <- tps_classify_pathway_dynamics(pws_c)
-link <- tps_link_states_pathways(states, dyn, tps_example_term2gene)
-head(link)
-}
-
+data(tps_example, package = "timeProtState")
+se <- tps_import(tps_example_abundance, tps_example_metadata,
+                 tps_example_annotation)
+design <- tps_make_design(se)
+contrasts <- tps_make_contrasts(design, endpoint = 7)
+fit <- tps_fit(se, design, contrasts)
+pws <- tps_pathway_scores(fit, tps_example_term2gene,
+                           id_col = "locus_tag", family = "vs_baseline")
+ave <- rep(1, nrow(pws$statistic_matrix))
+pws_c <- tps_calibrate_pathways(pws, abundance = ave, n_perm = 10, seed = 1)
+tps_classify_pathway_dynamics(pws_c)
 }

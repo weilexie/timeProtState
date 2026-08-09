@@ -25,9 +25,9 @@
     time[is_bl] <- "baseline"
   }
   nb <- !is_bl
-  parts <- strsplit(group_levels[nb], "_", fixed = TRUE)
-  cond[nb] <- vapply(parts, `[`, character(1L), 1L)
-  time[nb] <- vapply(parts, function(p) p[2L], character(1L))
+  base <- group_levels[nb]
+  cond[nb] <- sub("_[0-9.]+$", "", base)
+  time[nb] <- sub("^.*_", "", base)
   data.frame(cell = group_levels, condition = cond, time = time,
              is_baseline = is_bl, stringsAsFactors = FALSE)
 }

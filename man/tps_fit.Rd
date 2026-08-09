@@ -36,7 +36,7 @@ F-tests for the average-time, heterogeneity, and within-condition families.
 }
 \details{
 The default \code{trend = TRUE, robust = TRUE} is applied uniformly across
-all families (resolving the legacy three-way eBayes inconsistency — see
+all families (resolving the legacy three-way eBayes inconsistency -- see
 STATISTICAL_CONTRACT.md section 3).
 }
 \examples{

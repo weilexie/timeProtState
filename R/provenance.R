@@ -3,7 +3,7 @@
 ## ============================================================================
 ##
 ## Every public function appends to metadata(se)$timeProtState$provenance.
-## This is mandatory (STATISTICAL_CONTRACT 4.3) — never print-and-forget.
+## This is mandatory (STATISTICAL_CONTRACT 4.3) -- never print-and-forget.
 
 .make_provenance <- function(arg_capture, se, stage) {
   ## The input object may be a SummarizedExperiment (matrix fingerprint),

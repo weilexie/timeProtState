@@ -148,13 +148,11 @@ tps_make_design <- function(se, condition = "condition", time = "time",
   out
 }
 
-## natural sort key: split "<condition>_<time>" into (condition, numeric time)
+## natural sort key: extract condition and numeric time from "<condition>_<time>"
+## Uses regex (not strsplit) to handle condition names containing underscores
 .natural_sort_key <- function(x) {
-  parts <- strsplit(x, "_", fixed = TRUE)
-  cond <- vapply(parts, `[`, character(1L), 1L)
-  tt <- vapply(parts, function(p) {
-    if (length(p) >= 2L) suppressWarnings(as.numeric(p[2L])) else NA_real_
-  }, numeric(1L))
+  cond <- sub("_[0-9.]+$", "", x)
+  tt <- suppressWarnings(as.numeric(sub("^.*_", "", x)))
   order(cond, tt)
 }
 

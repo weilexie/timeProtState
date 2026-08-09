@@ -177,12 +177,17 @@ reshape2_or_gather <- function(df, key, value, id) {
 #' @return a ggplot object.
 #'
 #' @examples
-#' \dontrun{
-#' pws_c <- tps_calibrate_pathways(pws, abundance = ave, n_perm = 100)
-#' states <- tps_classify_pathways(pws_c)
-#' tps_plot_pathway_states(states)
-#' }
-#'
+#' data(tps_example, package = "timeProtState")
+#' se <- tps_import(tps_example_abundance, tps_example_metadata,
+#'                  tps_example_annotation)
+#' design <- tps_make_design(se)
+#' contrasts <- tps_make_contrasts(design, endpoint = 7)
+#' fit <- tps_fit(se, design, contrasts)
+#' pws <- tps_pathway_scores(fit, tps_example_term2gene,
+#'                            id_col = "locus_tag", family = "vs_baseline")
+#' ave <- rep(1, nrow(pws$statistic_matrix))
+#' pws_c <- tps_calibrate_pathways(pws, abundance = ave, n_perm = 10, seed = 1)
+#' tps_plot_pathway_states(tps_classify_pathways(pws_c))
 #' @export
 tps_plot_pathway_states <- function(pathway_states) {
   if (!requireNamespace("ggplot2", quietly = TRUE)) {
@@ -262,13 +267,17 @@ tps_plot_state_distribution <- function(states) {
 #' @return a ggplot object with underlying data attached as attribute \code{"data"}.
 #'
 #' @examples
-#' \dontrun{
-#' pws <- tps_pathway_scores(fit, term2gene, id_col = "locus_tag",
-#'                            family = "vs_baseline")
-#' pws_c <- tps_calibrate_pathways(pws, abundance = ave, n_perm = 200)
-#' tps_plot_pathway_trajectory(pws_c, term = "org20001", metric = "NET")
-#' }
-#'
+#' data(tps_example, package = "timeProtState")
+#' se <- tps_import(tps_example_abundance, tps_example_metadata,
+#'                  tps_example_annotation)
+#' design <- tps_make_design(se)
+#' contrasts <- tps_make_contrasts(design, endpoint = 7)
+#' fit <- tps_fit(se, design, contrasts)
+#' pws <- tps_pathway_scores(fit, tps_example_term2gene,
+#'                            id_col = "locus_tag", family = "vs_baseline")
+#' ave <- rep(1, nrow(pws$statistic_matrix))
+#' pws_c <- tps_calibrate_pathways(pws, abundance = ave, n_perm = 10, seed = 1)
+#' tps_plot_pathway_states(tps_classify_pathways(pws_c))
 #' @export
 tps_plot_pathway_trajectory <- function(calibrated, term,
                                          metric = c("NET", "REM", "COH"),

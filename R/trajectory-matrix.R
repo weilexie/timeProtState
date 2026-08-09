@@ -41,7 +41,7 @@
 #' shared-baseline design:
 #' \itemize{
 #'   \item \code{unique_cell}: group means with baseline appearing ONCE (the
-#'     statistically correct input for clustering — fixes the legacy 3x
+#'     statistically correct input for clustering -- fixes the legacy 3x
 #'     baseline-copy inflation).
 #'   \item \code{display}: baseline copied per condition, for plotting only.
 #'   \item \code{delta}: log2FC vs baseline per condition x time.

@@ -138,7 +138,7 @@
 #'   pathways where conditions diverge.
 #'
 #' @examples
-#' \dontrun{
+#' data(tps_example, package = "timeProtState")
 #' se <- tps_import(tps_example_abundance, tps_example_metadata,
 #'                  tps_example_annotation)
 #' design <- tps_make_design(se)
@@ -146,15 +146,9 @@
 #' fit <- tps_fit(se, design, contrasts)
 #' pws <- tps_pathway_scores(fit, tps_example_term2gene,
 #'                            id_col = "locus_tag", family = "vs_baseline")
-#' ave <- as.numeric(tapply(
-#'   tps_results(fit, "vs_baseline")$AveExpr,
-#'   factor(tps_results(fit, "vs_baseline")$feature_id,
-#'          levels = rownames(pws$statistic_matrix)), function(x) x[1]))
-#' pws_c <- tps_calibrate_pathways(pws, abundance = ave, n_perm = 200, seed = 1)
-#' dyn <- tps_classify_pathway_dynamics(pws_c)
-#' head(dyn)
-#' }
-#'
+#' ave <- rep(1, nrow(pws$statistic_matrix))
+#' pws_c <- tps_calibrate_pathways(pws, abundance = ave, n_perm = 10, seed = 1)
+#' tps_classify_pathway_dynamics(pws_c)
 #' @export
 tps_classify_pathway_dynamics <- function(calibrated, alpha = 0.05, coh_cut = 0.5) {
   if (!inherits(calibrated, "tps_pathway_calibrated")) {
@@ -250,12 +244,17 @@ tps_classify_pathway_dynamics <- function(calibrated, alpha = 0.05, coh_cut = 0.
 #'   n_proteins, n_pathways, observed_overlap, expected_overlap, enrichment}.
 #'
 #' @examples
-#' \dontrun{
-#' dyn <- tps_classify_pathway_dynamics(pws_c)
-#' link <- tps_link_states_pathways(states, dyn, tps_example_term2gene)
-#' head(link)
-#' }
-#'
+#' data(tps_example, package = "timeProtState")
+#' se <- tps_import(tps_example_abundance, tps_example_metadata,
+#'                  tps_example_annotation)
+#' design <- tps_make_design(se)
+#' contrasts <- tps_make_contrasts(design, endpoint = 7)
+#' fit <- tps_fit(se, design, contrasts)
+#' pws <- tps_pathway_scores(fit, tps_example_term2gene,
+#'                            id_col = "locus_tag", family = "vs_baseline")
+#' ave <- rep(1, nrow(pws$statistic_matrix))
+#' pws_c <- tps_calibrate_pathways(pws, abundance = ave, n_perm = 10, seed = 1)
+#' tps_classify_pathway_dynamics(pws_c)
 #' @export
 tps_link_states_pathways <- function(states, pathway_dynamics, term2gene,
                                       protein_ids = NULL) {
@@ -381,12 +380,17 @@ tps_link_states_pathways <- function(states, pathway_dynamics, term2gene,
 #'   n_divergent_timepoints, max_divergent_pair, max_divergent_time}.
 #'
 #' @examples
-#' \dontrun{
-#' dyn <- tps_classify_pathway_dynamics(pws_c)
-#' div <- tps_divergence_score(pws_c, dyn)
-#' head(div[order(-div$divergence_score), ])
-#' }
-#'
+#' data(tps_example, package = "timeProtState")
+#' se <- tps_import(tps_example_abundance, tps_example_metadata,
+#'                  tps_example_annotation)
+#' design <- tps_make_design(se)
+#' contrasts <- tps_make_contrasts(design, endpoint = 7)
+#' fit <- tps_fit(se, design, contrasts)
+#' pws <- tps_pathway_scores(fit, tps_example_term2gene,
+#'                            id_col = "locus_tag", family = "vs_baseline")
+#' ave <- rep(1, nrow(pws$statistic_matrix))
+#' pws_c <- tps_calibrate_pathways(pws, abundance = ave, n_perm = 10, seed = 1)
+#' tps_classify_pathway_dynamics(pws_c)
 #' @export
 tps_divergence_score <- function(calibrated, dyn = NULL, alpha = 0.05) {
   if (!inherits(calibrated, "tps_pathway_calibrated")) {
@@ -452,12 +456,17 @@ tps_divergence_score <- function(calibrated, dyn = NULL, alpha = 0.05) {
 #'   and \code{q_dynamic} (BH-adjusted).
 #'
 #' @examples
-#' \dontrun{
-#' dyn <- tps_classify_pathway_dynamics(pws_c)
-#' dyn_cal <- tps_calibrate_dynamics(pws_c, n_perm = 200, seed = 1)
-#' head(dyn_cal[dyn_cal$q_dynamic < 0.1, ])
-#' }
-#'
+#' data(tps_example, package = "timeProtState")
+#' se <- tps_import(tps_example_abundance, tps_example_metadata,
+#'                  tps_example_annotation)
+#' design <- tps_make_design(se)
+#' contrasts <- tps_make_contrasts(design, endpoint = 7)
+#' fit <- tps_fit(se, design, contrasts)
+#' pws <- tps_pathway_scores(fit, tps_example_term2gene,
+#'                            id_col = "locus_tag", family = "vs_baseline")
+#' ave <- rep(1, nrow(pws$statistic_matrix))
+#' pws_c <- tps_calibrate_pathways(pws, abundance = ave, n_perm = 10, seed = 1)
+#' tps_classify_pathway_dynamics(pws_c)
 #' @export
 tps_calibrate_dynamics <- function(calibrated, n_perm = 500L, alpha = 0.05,
                                     coh_cut = 0.5, seed = 1L) {

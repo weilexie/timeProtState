@@ -41,12 +41,9 @@ enables validation of \code{\link{tps_classify_pathway_dynamics}} by
 planting a known dynamic pattern and checking recovery.
 }
 \examples{
-\dontrun{
-sim <- tps_simulate_timecourse(n_features = 100, seed = 1)
-sim2 <- tps_inject_pathway_effect(sim, tps_example_term2gene,
-                                   term = "org20001",
-                                   effect_type = "transient_burst",
-                                   condition = "Acid")
-}
-
+sim <- tps_simulate_timecourse(n_features = 50, seed = 1)
+t2g_sim <- data.frame(term = "pw1", gene = paste0("P", sprintf("\%04d", 1:10)),
+                      stringsAsFactors = FALSE)
+sim2 <- tps_inject_pathway_effect(sim, t2g_sim, term = "pw1",
+  effect_type = "early_directional", condition = "Acid")
 }
