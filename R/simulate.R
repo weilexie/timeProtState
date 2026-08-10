@@ -18,10 +18,6 @@
 .f_null <- function(t, amplitude = 0) rep(0, length(t))
 .f_monotonic <- function(t, amplitude = 1) amplitude * (t - min(t)) /
   (max(t) - min(t))
-.f_delayed <- function(t, amplitude = 1, onset_frac = 0.5) {
-  onset <- min(t) + onset_frac * (max(t) - min(t))
-  amplitude * as.numeric(t >= onset)
-}
 .f_transient <- function(t, amplitude = 1, peak_frac = 0.4, width_frac = 0.15) {
   span <- max(t) - min(t)
   peak <- min(t) + peak_frac * span

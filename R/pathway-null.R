@@ -290,7 +290,7 @@ tps_calibrate_pathways <- function(scores, abundance = NULL, n_perm = 1000L,
 #'                            id_col = "locus_tag", family = "vs_baseline")
 #' ave <- rep(1, nrow(pws$statistic_matrix))
 #' pws_c <- tps_calibrate_pathways(pws, abundance = ave, n_perm = 10, seed = 1)
-#' tps_calibrate_pathways(pws, abundance = ave, n_perm = 10, seed = 1)
+#' tps_classify_pathways(pws_c)
 #' @export
 tps_classify_pathways <- function(calibrated, alpha = 0.05, coh_cut = 0.5) {
   if (!inherits(calibrated, "tps_pathway_calibrated")) {

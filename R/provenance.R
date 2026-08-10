@@ -90,6 +90,10 @@ tps_provenance <- function(object) {
     md <- object
   } else if (is.list(object) && "timeProtState" %in% names(object)) {
     md <- object$timeProtState
+  } else if (!is.null(attr(object, "provenance"))) {
+    ## data.frame results from tps_classify_pathways, tps_classify_pathway_dynamics,
+    ## tps_divergence_score, tps_link_states_pathways, tps_calibrate_dynamics
+    return(attr(object, "provenance"))
   } else {
     return(NULL)
   }
