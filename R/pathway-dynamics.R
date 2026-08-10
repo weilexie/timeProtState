@@ -255,6 +255,10 @@ tps_classify_pathway_dynamics <- function(calibrated, alpha = 0.05, coh_cut = 0.
   attr(long, "summary") <- .dynamics_summary(long)
   attr(long, "alpha") <- alpha
   attr(long, "coh_cut") <- coh_cut
+  attr(long, "provenance") <- list(
+    stage = "classify_pathway_dynamics", alpha = alpha, coh_cut = coh_cut,
+    timestamp = format(Sys.time(), "%Y-%m-%dT%H:%M:%S%z"),
+    package_version = as.character(getNamespaceVersion("timeProtState")))
   long
 }
 
@@ -403,8 +407,11 @@ tps_link_states_pathways <- function(states, pathway_dynamics, term2gene,
     }
   }
   out <- do.call(rbind, rows)
-  ## BH correction over all tests
   out$q_hypergeometric <- stats::p.adjust(out$p_hypergeometric, method = "BH")
+  attr(out, "provenance") <- list(
+    stage = "link_states_pathways",
+    timestamp = format(Sys.time(), "%Y-%m-%dT%H:%M:%S%z"),
+    package_version = as.character(getNamespaceVersion("timeProtState")))
   out
 }
 
@@ -523,10 +530,13 @@ tps_divergence_score <- function(calibrated, dyn = NULL, alpha = 0.05) {
       max_divergent_pair = max_pair, max_divergent_time = max_time,
       stringsAsFactors = FALSE)
   }
-  do.call(rbind, rows)
-}
-
-## ---- permutation-calibrated dynamic states ---------------------------------
+  result <- do.call(rbind, rows)
+  attr(result, "provenance") <- list(
+    stage = "divergence_score", alpha = alpha,
+    timestamp = format(Sys.time(), "%Y-%m-%dT%H:%M:%S%z"),
+    package_version = as.character(getNamespaceVersion("timeProtState")))
+  result
+}## ---- permutation-calibrated dynamic states ---------------------------------
 #' Calibrate pathway dynamic states with a permutation null
 #'
 #' Permutes protein labels within the calibrated pathway score universe and
@@ -640,6 +650,10 @@ tps_calibrate_dynamics <- function(calibrated, n_perm = 500L, alpha = 0.05,
   dyn_obs$p_dynamic <- p_dynamic[dyn_obs$key]
   dyn_obs$q_dynamic <- q_dynamic[dyn_obs$key]
   dyn_obs$key <- NULL
-
+  attr(dyn_obs, "provenance") <- list(
+    stage = "calibrate_dynamics", n_perm = n_perm, alpha = alpha,
+    coh_cut = coh_cut, seed = seed,
+    timestamp = format(Sys.time(), "%Y-%m-%dT%H:%M:%S%z"),
+    package_version = as.character(getNamespaceVersion("timeProtState")))
   dyn_obs
 }

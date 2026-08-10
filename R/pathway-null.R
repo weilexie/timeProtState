@@ -323,7 +323,12 @@ tps_classify_pathways <- function(calibrated, alpha = 0.05, coh_cut = 0.5) {
         stringsAsFactors = FALSE)
     }
   }
-  do.call(rbind, rows)
+  result <- do.call(rbind, rows)
+  attr(result, "provenance") <- list(
+    stage = "classify_pathways", alpha = alpha, coh_cut = coh_cut,
+    timestamp = format(Sys.time(), "%Y-%m-%dT%H:%M:%S%z"),
+    package_version = as.character(getNamespaceVersion("timeProtState")))
+  result
 }
 
 ## ---- methods ---------------------------------------------------------------
