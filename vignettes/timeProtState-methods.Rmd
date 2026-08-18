@@ -59,9 +59,20 @@ transparent axes:
 2. **condition_heterogeneity**: from the heterogeneity F-test
 3. **direction_pattern**: from endpoint contrast signs across conditions
 
-These combine into a final `state` (e.g. `shared_dynamic_up`,
-`condition_dependent_dynamic`, `cross_condition_opposite`), but the raw axes
-are always retained for auditability.
+These combine into a final `state`. Documented labels are
+`stable_or_unresolved`, `shared_dynamic_up`, `shared_dynamic_down`,
+`condition_dependent_dynamic`, `endpoint_up`, `endpoint_down`,
+`temporal_only`, `heterogeneity_only`,
+`cross_condition_opposite`, and `temporal_reversal`. The raw axes and
+the rule manifest are always retained for auditability.
+
+# Optional repeated measures
+
+`tps_fit()` accepts `block` (a `colData` column name or a sample-aligned
+vector) and optional `correlation`. When `block` is supplied and
+`correlation` is `NULL`, the consensus correlation is estimated with
+`limma::duplicateCorrelation()`. A column named `replicate` is never
+treated as a block by default.
 
 # Pathway NET / REM / COH
 
@@ -90,9 +101,18 @@ $$p_{NET} = \frac{\#\{|NET_{null}-\mu^0| \geq
 REM uses an upper-tail comparison, $REM_{null} \geq REM_{obs}$.
 
 **Calibration caveat**: abundance stratification reduces anti-conservative
-bias but does not fully correct it, because within-pathway protein correlations
-cannot be captured by label permutation. Interpret borderline q-values
-cautiously and report the calibration mode used.
+bias from abundance imbalance. Label permutation still breaks
+within-pathway covariance. The default `intergene = "vif"` estimates
+each pathway's mean pairwise residual correlation across samples
+(after the group-means fit) and scales the observed NET/REM excess by
+`1/sqrt(VIF)` before the permutation comparison
+(`VIF = 1 + (k-1)*rho`; ADR 0010). The VIF derivation is exact for NET
+(mean of correlated normals); applying it to REM (mean of folded normals)
+is a first-order approximation. Residual correlation is estimated
+from `tps_fit` residuals, not from the t-profiles themselves, so a
+shared pathway effect is not mistaken for noise. Use
+`intergene = "none"` only when you need the historical unadjusted
+permutation. Report both `mode` and `intergene`.
 
 # Contrast-driven pathway remodeling dynamics
 
@@ -105,13 +125,17 @@ COH evolve over time, calibrated by per-timepoint permutation.
 `tps_classify_pathway_dynamics()` classifies these trajectories into
 interpretable dynamic patterns:
 
-- **early_directional**: NET significant and coherent from the first timepoint
-- **gradual_remodeling**: REM increases progressively, COH rises over time
+- **early_directional**: first timepoint NET-significant with high COH
+  and a persistent, directionally consistent NET signal
+- **gradual_remodeling**: terminal REM is significant and larger than
+  the first timepoint REM (no COH-rise requirement)
 - **delayed_opposition**: the final supported NET direction reverses an earlier
   supported direction
 - **transient_burst**: REM peaks mid-course, then subsides
 - **directional_delayed**: NET becomes significant at later timepoints
-- **sustained_remodeling**: REM significant throughout, NET never directional
+  (or is significant but does not meet the early-directional rule)
+- **sustained_remodeling**: at least one timepoint has significant REM
+  and no timepoint has significant NET
 
 Cross-condition **divergence** is reported as a separate flag when supported
 NET directions oppose one another at a matched timepoint.
@@ -119,8 +143,28 @@ NET directions oppose one another at a matched timepoint.
 The full rank-audited contrast family's moderated statistics drive pathway-level
 inference directly, preserving direction and uncertainty at every timepoint.
 `tps_link_states_pathways()` further connects
-protein-level evidence states to pathway-level dynamics, enabling diagnoses
-like "do temporal-reversal proteins cluster in transient-burst pathways?"
+protein-level evidence states to pathway-level dynamics when protein
+identifiers are mapped onto the pathway gene space (pass a **named**
+`protein_ids` vector keyed by `feature_id` when `term2gene$gene` is a
+locus tag rather than the fit row name).
+
+# Correlated-pathway simulation
+
+`tps_simulate_correlated_pathways()` generates a shared-baseline
+experiment with an explicit disjoint pathway membership and
+compound-symmetric within-pathway correlation
+`epsilon[i in k] = sqrt(rho)*Z_k + sqrt(1-rho)*E_i`.
+`within_pathway_cor = 0` is independent noise;
+`pathway_signal` is `"none"`, `"codirectional"`, or `"mixed"`.
+The object includes `term2gene` for `tps_pathway_scores()`.
+
+Abundance-stratified label permutation does not preserve that
+within-pathway covariance. The default `intergene = "vif"` rescales
+the observed competitive scores for the estimated member correlation
+before comparing them with the permutation stream. That is a
+calibration claim (type-I closer to nominal than unadjusted
+permutation or CAMERA on the same correlated-null design), not a
+claim of higher power or more discoveries.
 
 # Session info
 

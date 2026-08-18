@@ -4,17 +4,9 @@
 \name{timeProtState-package}
 \alias{timeProtState}
 \alias{timeProtState-package}
-\title{timeProtState: timeProtState: Contrast-Aware Pathway Remodeling Dynamics for Time-Course Proteomics}
+\title{timeProtState: Contrast-Aware Pathway Remodeling Dynamics for Time-Course Proteomics}
 \description{
-Provides an auditable framework for shared-baseline, multi-condition time-course proteomics experiments. The package constructs estimable contrast families from a saturated group-means design, decomposes protein-level temporal and condition-dependent evidence into transparent axes, and computes permutation-calibrated directional and remodeling pathway states. Includes trajectory clustering, simulation for benchmarks, and structured export.
-}
-\seealso{
-Useful links:
-\itemize{
-  \item \url{https://github.com/weilexie/timeProtState}
-  \item Report bugs at \url{https://github.com/weilexie/timeProtState/issues}
-}
-
+Provides an auditable framework for shared-baseline, multi-condition time-course proteomics experiments. The package constructs estimable contrast families from a saturated group-means design, decomposes protein-level temporal and condition-dependent evidence into transparent axes, and computes permutation-calibrated directional and remodeling pathway states. Optional repeated-measures correlation is supported in the fit. Includes trajectory clustering, correlated-pathway simulation for benchmarks, and structured export.
 }
 \author{
 \strong{Maintainer}: Weile Xie \email{weile.xie@outlook.com}

@@ -126,3 +126,48 @@ test_that("tps_plot_pathway_states errors on bad input", {
   skip_if_no_ggplot2()
   expect_error(tps_plot_pathway_states(123), "tps_classify_pathways")
 })
+
+test_that("tps_plot_pathway_trajectory renders vs_baseline calibrated object", {
+  skip_if_no_ggplot2()
+  data(tps_example, package = "timeProtState")
+  se <- tps_import(tps_example_abundance, tps_example_metadata,
+                   tps_example_annotation)
+  design <- tps_make_design(se)
+  contrasts <- tps_make_contrasts(design, endpoint = 7)
+  fit <- tps_fit(se, design, contrasts)
+  pws <- tps_pathway_scores(fit, tps_example_term2gene,
+                            id_col = "locus_tag", family = "vs_baseline")
+  ave <- as.numeric(tapply(
+    tps_results(fit, "vs_baseline")$AveExpr,
+    factor(tps_results(fit, "vs_baseline")$feature_id,
+           levels = rownames(pws$statistic_matrix)),
+    function(x) x[1]))
+  pws_c <- tps_calibrate_pathways(pws, abundance = ave, n_perm = 50, seed = 1)
+  p <- tps_plot_pathway_trajectory(pws_c, term = rownames(pws_c$scores$NET)[1])
+  expect_true(ggplot2::is_ggplot(p))
+  expect_true(nrow(p$data) > 0)
+  expect_true("condition" %in% names(p$data))
+  expect_true("time" %in% names(p$data))
+})
+
+test_that("tps_plot_pathway_trajectory handles endpoint family prefix", {
+  skip_if_no_ggplot2()
+  data(tps_example, package = "timeProtState")
+  se <- tps_import(tps_example_abundance, tps_example_metadata,
+                   tps_example_annotation)
+  design <- tps_make_design(se)
+  contrasts <- tps_make_contrasts(design, endpoint = 7)
+  fit <- tps_fit(se, design, contrasts)
+  pws <- tps_pathway_scores(fit, tps_example_term2gene,
+                            id_col = "locus_tag", family = "endpoint")
+  ave <- as.numeric(tapply(
+    tps_results(fit, "endpoint")$AveExpr,
+    factor(tps_results(fit, "endpoint")$feature_id,
+           levels = rownames(pws$statistic_matrix)),
+    function(x) x[1]))
+  pws_c <- tps_calibrate_pathways(pws, abundance = ave, n_perm = 50, seed = 1)
+  p <- tps_plot_pathway_trajectory(pws_c, term = rownames(pws_c$scores$NET)[1])
+  expect_true(ggplot2::is_ggplot(p))
+  ## endpoint_ prefix must be stripped — condition should NOT start with "endpoint_"
+  expect_false(any(grepl("^endpoint_", p$data$condition)))
+})

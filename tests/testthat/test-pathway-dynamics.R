@@ -101,7 +101,11 @@ test_that("dynamics errors on endpoint-only scores (no parseable times)", {
 test_that("link produces consistency diagnosis table", {
   d <- run_dynamics()
   dyn <- tps_classify_pathway_dynamics(d$pws_c)
-  link <- tps_link_states_pathways(d$states, dyn, tps_example_term2gene)
+  ## Map feature_id (protein_id) to locus_tag for term2gene alignment
+  ann <- tps_example_annotation
+  pid <- setNames(ann$locus_tag, ann$protein_id)
+  link <- tps_link_states_pathways(d$states, dyn, tps_example_term2gene,
+                                    protein_ids = pid)
   expect_true(is.data.frame(link))
   expect_true(all(c("protein_state", "pathway_dynamic", "enrichment") %in%
                   names(link)))
@@ -241,11 +245,47 @@ test_that("calibrate_pathways records correction mode in provenance", {
 test_that("link includes hypergeometric p-value and BH q", {
   d <- run_dynamics()
   dyn <- tps_classify_pathway_dynamics(d$pws_c)
-  link <- tps_link_states_pathways(d$states, dyn, tps_example_term2gene)
+  ids <- stats::setNames(
+    tps_example_annotation$locus_tag,
+    tps_example_annotation$protein_id
+  )
+  link <- tps_link_states_pathways(
+    d$states, dyn, tps_example_term2gene, protein_ids = ids
+  )
   expect_true("p_hypergeometric" %in% names(link))
   expect_true("q_hypergeometric" %in% names(link))
+  expect_true(all(c("n_proteins_in_state", "n_pathways_in_dynamic") %in% names(link)))
   expect_true(all(link$p_hypergeometric >= 0 & link$p_hypergeometric <= 1))
   expect_true(all(link$q_hypergeometric >= 0 & link$q_hypergeometric <= 1))
+  expect_gt(sum(link$observed_overlap), 0L)
+})
+
+test_that("named protein_ids are remapped to sorted state rows", {
+  d <- run_dynamics()
+  dyn <- tps_classify_pathway_dynamics(d$pws_c)
+  ids <- stats::setNames(
+    tps_example_annotation$locus_tag,
+    tps_example_annotation$protein_id
+  )
+  ## Shuffle the named vector so positional alignment would be wrong.
+  ids <- ids[sample.int(length(ids))]
+  link <- tps_link_states_pathways(
+    d$states, dyn, tps_example_term2gene, protein_ids = ids
+  )
+  expect_gt(sum(link$observed_overlap), 0L)
+})
+
+test_that("pathway dynamic labels are only the documented set", {
+  d <- run_dynamics()
+  dyn <- tps_classify_pathway_dynamics(d$pws_c)
+  documented <- c(
+    "early_directional", "gradual_remodeling", "delayed_opposition",
+    "transient_burst", "directional_delayed", "sustained_remodeling",
+    "no_dynamic_signal"
+  )
+  expect_true(all(dyn$dynamic_state %in% documented))
+  expect_false("divergent" %in% dyn$dynamic_state)
+  expect_true(is.logical(dyn$is_divergent))
 })
 
 ## ===========================================================================
@@ -388,24 +428,26 @@ test_that("tps_inject_pathway_effect errors on bad inputs", {
 ## ===========================================================================
 ## COH threshold sensitivity analysis (Gap D: auditor flagged magic numbers)
 ## ===========================================================================
-test_that("coh_cut sensitivity: states are stable across 0.3/0.5/0.7", {
+test_that("coh_cut sensitivity returns aligned valid classifications", {
   d <- run_dynamics(n_perm = 200L)
   states_by_cut <- lapply(c(0.3, 0.5, 0.7), function(cc) {
     dyn <- tps_classify_pathway_dynamics(d$pws_c, coh_cut = cc)
-    table(dyn$dynamic_state)
+    unique(dyn[, c("term", "condition", "dynamic_state")])
   })
-  ## all three should produce valid state tables with the same vocabulary
+  ## All three should preserve the same pathway-condition rows and vocabulary.
+  keys <- lapply(states_by_cut, function(x) paste(x$term, x$condition, sep = "##"))
+  expect_true(all(vapply(keys[-1L], identical, logical(1), keys[[1L]])))
   for (i in 1:3) {
-    expect_true(length(states_by_cut[[i]]) > 0)
-    expect_true(all(names(states_by_cut[[i]]) %in%
+    expect_gt(nrow(states_by_cut[[i]]), 0L)
+    expect_true(all(states_by_cut[[i]]$dynamic_state %in%
       c("early_directional","gradual_remodeling","delayed_opposition",
         "transient_burst","directional_delayed","sustained_remodeling",
         "no_dynamic_signal")))
   }
-  ## no_dynamic_signal should be the majority in all cases (synthetic data)
+  ## No-signal trajectories should remain the majority in this synthetic data.
   for (i in 1:3) {
-    expect_true(states_by_cut[[i]]["no_dynamic_signal"] >=
-                sum(states_by_cut[[i]]) * 0.5)
+    expect_gte(mean(states_by_cut[[i]]$dynamic_state == "no_dynamic_signal"),
+               0.5)
   }
 })
 
@@ -457,6 +499,26 @@ test_that("calibrate_dynamics does not perturb global RNG", {
 
 test_that("calibrate_dynamics errors on bad input", {
   expect_error(tps_calibrate_dynamics(123), "tps_pathway_calibrated")
+})
+
+test_that("cheap shipped-example path still returns trajectory p-values", {
+  sim <- tps_simulate_timecourse(
+    n_features = 24, conditions = c("A", "B"), times = c(1, 3),
+    n_replicates = 2, effect_mix = c(null = 1), seed = 1)
+  se <- tps_import(sim$abundance, sim$col_data)
+  design <- tps_make_design(se)
+  contrasts <- tps_make_contrasts(design, endpoint = 3)
+  fit <- tps_fit(se, design, contrasts)
+  t2g <- data.frame(term = "pw1", gene = rownames(sim$abundance)[1:8],
+                    stringsAsFactors = FALSE)
+  pws <- tps_pathway_scores(fit, t2g, family = "vs_baseline", min_size = 5)
+  pws_c <- tps_calibrate_pathways(pws, mode = "unstratified",
+                                  n_perm = 5, seed = 1)
+  dyn_cal <- tps_calibrate_dynamics(pws_c, n_perm = 5, seed = 1)
+  expect_true(all(c("p_dynamic", "q_dynamic", "dynamic_state") %in% names(dyn_cal)))
+  expect_gt(nrow(dyn_cal), 0L)
+  expect_true(all(dyn_cal$p_dynamic >= 0 & dyn_cal$p_dynamic <= 1))
+  expect_equal(unique(dyn_cal$term), "pw1")
 })
 
 ## ===========================================================================

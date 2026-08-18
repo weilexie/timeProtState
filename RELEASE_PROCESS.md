@@ -1,7 +1,8 @@
 # Release process
 
-This checklist covers the `timeProtState` 0.99.x submission candidate. Do not
-publish placeholder repository URLs, issue trackers, ORCIDs, or DOIs.
+This checklist covers the `timeProtState` 0.99.x development quality gate.
+Do not publish placeholder repository URLs, issue trackers, ORCIDs, or
+DOIs. Do not describe the package as submission-ready.
 
 ## Local quality gate
 
@@ -16,34 +17,51 @@ devtools::build("04_package/timeProtState", vignettes = TRUE)
 Then check the source tarball:
 
 ```powershell
-R CMD check --as-cran --no-manual timeProtState_0.99.0.tar.gz
+R CMD check --as-cran timeProtState_0.99.0.tar.gz
 Rscript -e "BiocCheck::BiocCheck('timeProtState_0.99.0.tar.gz')"
 ```
 
-Verified on 2026-08-09:
+Verified on 2026-08-13 (see `02_audit_and_contract/05_STATUS.md` §3.3):
 
-- tests: 359 success expectations, 64 expected warnings, no failures/errors;
-- `R CMD check`: 0 ERROR, 0 WARNING, 1 NOTE (`New submission`);
-- `BiocCheck 1.44.2`: 1 ERROR, 0 WARNING, 8 NOTES. The error is external:
-  the maintainer email is not registered on the Bioconductor Support Site.
+- tests: 0 failures, 0 errors (expected warnings from partial-NA coefficients);
+- `R CMD check --as-cran`: 0 ERROR, 0 WARNING, 1 NOTE (`New submission`);
+- `BiocCheck`: 1 ERROR, 0 WARNING, 8 NOTES. The error is external: the
+  maintainer email is not registered on the Bioconductor Support Site.
 
-The check is not submission-clean until the maintainer registers
-`weile.xie@outlook.com` on the Support Site. The author should also subscribe to
-Bioc-devel. Add an ORCID or `fnd` role only when the real metadata are supplied.
+The Bioconductor Support Site registration of `weile.xie@outlook.com` is
+a human-only step. Add an ORCID or `fnd` role only when the real metadata
+are supplied.
 
 ## Validation gate
 
-Run the authoritative sequence documented in
-`05_validation/02_timeProtState-paper/README.md`. Confirm that:
+Run the **public** sequence documented in
+`05_validation/02_timeProtState-paper/README.md`:
 
-- the named endpoints remain Acid day 7 and PXD006262 WT 240 min;
+- `scripts/13_simulation_correlation_benchmark.R`
+- `scripts/15_PXD006262_closest_longitudinal.R`
+- `scripts/21_PXD065583_ASO_benchmark.R`
+
+Confirm that:
+
+- the named public endpoints remain PXD006262 WT 240 min and PXD065583
+  ASO 72 h versus the shared mock baseline;
 - comparison methods use the same pathway mappings and correction contract;
-- the generated CSV files match the numbers reported in the manuscript;
-- Figure 1 is regenerated from current CSV files and visually inspected;
-- no discovery-count comparison is described as sensitivity, specificity, or
-  false-positive performance without pathway-level ground truth.
+- NET is compared with CAMERA directional and REM with CAMERA mixed;
+  self-contained methods are not ranked by discovery count;
+- the generated public CSVs (`results/13–16`, `15/17–20`, `21–24`) match
+  the numbers reported in STATUS;
+- no discovery-count comparison is described as sensitivity, specificity,
+  or superiority without pathway-level ground truth.
+
+Do **not** run `04_reproduce_dormancy_dynamics.R`,
+`07_comprehensive_benchmark.R`, or `12_render_figure1.R` as part of this
+gate. Those scripts and the Acid day-7 / Figure 1 artefacts are frozen
+historical leftovers.
 
 ## Public release and archive
+
+Leave these steps until a real public tracker and manuscript rewrite exist.
+Do not invent repository URLs or a Zenodo DOI beforehand.
 
 1. Create the public repository and issue tracker.
 2. Add the real repository and issue URLs to `DESCRIPTION`.

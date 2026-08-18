@@ -15,6 +15,12 @@ If \code{NULL}, the package default (FDR < 0.05, lfc 0) is used.}
 \value{
 a list of class \code{tps_states} with \code{state_table} (per-feature
   axes + final state), \code{rule_manifest}, and \code{provenance}.
+  Documented \code{state} labels are \code{stable_or_unresolved},
+  \code{shared_dynamic_up}, \code{shared_dynamic_down},
+  \code{condition_dependent_dynamic}, \code{endpoint_up},
+  \code{endpoint_down}, \code{temporal_only},
+  \code{heterogeneity_only},
+  \code{cross_condition_opposite}, and \code{temporal_reversal}.
 }
 \description{
 Decomposes per-protein statistical evidence into three transparent axes

@@ -17,9 +17,10 @@
 #' Define a decision rule for state classification
 #'
 #' Constructs a rule list controlling how evidence is thresholded. The package
-#' default uses Benjamini-Hochberg FDR < 0.05 with no logFC gate; the
-#' \code{legacy_msm} profile (raw P < 0.05 and |logFC| >= 0.74) reproduces the
-#' historical dormancy analysis.
+#' default uses Benjamini-Hochberg FDR < 0.05 with no logFC gate. The
+#' historical raw-P + effect-size rule is reproduced by
+#' \code{tps_decision_rule(significance = "P.Value", lfc_threshold = 0.74)};
+#' there is no named profile object.
 #'
 #' @param significance character; \code{"adj.P.Val"} (default) or \code{"P.Value"}.
 #' @param alpha numeric; significance threshold (default 0.05).
@@ -60,6 +61,7 @@ tps_decision_rule <- function(significance = c("adj.P.Val", "P.Value"),
   sig_col <- rule$significance
   if (!sig_col %in% names(stat_row)) return(FALSE)
   sig_ok <- !is.na(stat_row[[sig_col]]) && stat_row[[sig_col]] < rule$alpha
+  if (!"logFC" %in% names(stat_row)) return(sig_ok)
   lfc_ok <- is.na(stat_row$logFC) || abs(stat_row$logFC) >= rule$lfc_threshold
   sig_ok && lfc_ok
 }
@@ -77,6 +79,12 @@ tps_decision_rule <- function(significance = c("adj.P.Val", "P.Value"),
 #'   If \code{NULL}, the package default (FDR < 0.05, lfc 0) is used.
 #' @return a list of class \code{tps_states} with \code{state_table} (per-feature
 #'   axes + final state), \code{rule_manifest}, and \code{provenance}.
+#'   Documented \code{state} labels are \code{stable_or_unresolved},
+#'   \code{shared_dynamic_up}, \code{shared_dynamic_down},
+#'   \code{condition_dependent_dynamic}, \code{endpoint_up},
+#'   \code{endpoint_down}, \code{temporal_only},
+#'   \code{heterogeneity_only},
+#'   \code{cross_condition_opposite}, and \code{temporal_reversal}.
 #'
 #' @examples
 #' data(tps_example, package = "timeProtState")
@@ -90,6 +98,9 @@ tps_decision_rule <- function(significance = c("adj.P.Val", "P.Value"),
 #' @export
 tps_classify_states <- function(fit, rule = NULL) {
   if (!inherits(fit, "tps_fit")) tps_abort("fit must be a tps_fit object.")
+  if (is.null(fit$contrasts) || is.null(fit$contrasts$conditions)) {
+    tps_abort("fit$contrasts or fit$contrasts$conditions is missing; refit before classify.")
+  }
   if (is.null(rule)) rule <- tps_decision_rule()
   if (!inherits(rule, "tps_decision_rule")) {
     tps_abort("rule must be a tps_decision_rule object.")
@@ -179,6 +190,10 @@ tps_classify_states <- function(fit, rule = NULL) {
     return(setNames(logical(0), character(0)))
   }
   sig_col <- rule$significance
+  if (!sig_col %in% names(rows)) {
+    return(setNames(rep(FALSE, length(unique(rows$feature_id))),
+                    unique(rows$feature_id)))
+  }
   hit <- !is.na(rows[[sig_col]]) & rows[[sig_col]] < rule$alpha
   if (rule$lfc_threshold > 0 && "logFC" %in% names(rows)) {
     ## Omnibus F rows have no single logFC; the effect-size gate applies only
@@ -235,6 +250,7 @@ tps_classify_states <- function(fit, rule = NULL) {
 }
 
 .axis_direction <- function(st, conditions) {
+  if (length(conditions) == 0L) return(rep("no_supported_change", nrow(st)))
   cols <- paste0("endpoint_dir_", conditions)
   dirs <- as.data.frame(st[, cols, drop = FALSE])
   apply(dirs, 1L, function(d) {
@@ -300,13 +316,25 @@ tps_classify_states <- function(fit, rule = NULL) {
   has_temporal <- tmp != "none"
   is_het <- het == "condition_dependent"
   is_opposite <- dir == "cross_condition_opposite"
+  has_endpoint_dir <- dir %in% c("concordant_up", "concordant_down",
+                                  "cross_condition_opposite")
 
-  out[!has_temporal & !is_het] <- "stable_or_unresolved"
+  ## truly stable: no temporal F, no heterogeneity, no endpoint direction
+  out[!has_temporal & !is_het & !has_endpoint_dir] <- "stable_or_unresolved"
+  ## endpoint t-test significant but no temporal/heterogeneity F
+  out[!has_temporal & !is_het & has_endpoint_dir] <-
+    ifelse(dir[!has_temporal & !is_het & has_endpoint_dir] == "concordant_up",
+           "endpoint_up", "endpoint_down")
+  ## temporal F significant, concordant direction, no heterogeneity
   out[has_temporal & !is_het & dir %in% c("concordant_up","concordant_down")] <-
     ifelse(dir[has_temporal & !is_het & dir %in% c("concordant_up","concordant_down")] == "concordant_up",
            "shared_dynamic_up", "shared_dynamic_down")
+  ## temporal F significant but no supported endpoint direction (Bug A1 fix)
+  out[has_temporal & !is_het & dir == "no_supported_change"] <- "temporal_only"
+  ## temporal + heterogeneity
   out[has_temporal & is_het] <- "condition_dependent_dynamic"
-  out[!has_temporal & is_het] <- "endpoint_only"
+  ## heterogeneity only (no temporal F)
+  out[!has_temporal & is_het] <- "heterogeneity_only"
   out[is_opposite] <- "cross_condition_opposite"
   ## temporal_reversal: significant sign-change across timepoints within a condition
   out[is_rev] <- "temporal_reversal"
@@ -351,5 +379,8 @@ print.tps_states <- function(x, ...) {
 #' @export
 tps_state_table <- function(states) {
   if (!inherits(states, "tps_states")) tps_abort("states must be a tps_states object.")
+  if (is.null(states$state_table) || !is.data.frame(states$state_table)) {
+    tps_abort("states object is malformed: state_table is missing or not a data.frame.")
+  }
   states$state_table
 }

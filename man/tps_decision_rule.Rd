@@ -26,9 +26,10 @@ a list of class \code{tps_decision_rule}.
 }
 \description{
 Constructs a rule list controlling how evidence is thresholded. The package
-default uses Benjamini-Hochberg FDR < 0.05 with no logFC gate; the
-\code{legacy_msm} profile (raw P < 0.05 and |logFC| >= 0.74) reproduces the
-historical dormancy analysis.
+default uses Benjamini-Hochberg FDR < 0.05 with no logFC gate. The
+historical raw-P + effect-size rule is reproduced by
+\code{tps_decision_rule(significance = "P.Value", lfc_threshold = 0.74)};
+there is no named profile object.
 }
 \examples{
 tps_decision_rule()

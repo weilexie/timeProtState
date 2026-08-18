@@ -35,8 +35,9 @@
 #' Builds a no-intercept cell-means design matrix from the experimental design
 #' encoded in a \code{\link[SummarizedExperiment]{SummarizedExperiment}}
 #' produced by \code{\link{tps_import}}. For a shared-baseline design (all
-#' baseline rows at one timepoint), the baseline collapses to a single cell
-#' shared by all conditions; otherwise a general group-means model is used.
+#' baseline rows share one timepoint \emph{and} one condition label), the
+#' baseline collapses to a single cell shared by all conditions. Contrast
+#' and trajectory constructors require that shared-baseline structure.
 #'
 #' @param se a \code{SummarizedExperiment} produced by \code{tps_import}.
 #' @param condition character; name of the condition column in \code{colData}.

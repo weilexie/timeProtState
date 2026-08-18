@@ -1,5 +1,9 @@
 ## data-raw/build_golden_fixture.R
 ##
+## HISTORICAL FIXTURE REBUILDER. Do not re-run against unpublished local
+## dormancy data. The committed tests/testthat/fixtures/golden_fit.rds is
+## frozen; package tests load that RDS and do not need TPS_DORMANCY_PROJECT.
+##
 ## Builds a small golden-master fixture from the real M. smegmatis dormancy
 ## data, to test that timeProtState reproduces the legacy limma analysis.
 ##
@@ -105,7 +109,6 @@ golden <- list(
 
 fixdir <- "tests/testthat/fixtures"
 dir.create(fixdir, showWarnings = FALSE, recursive = TRUE)
-saveRDS(golden, file.path(fixdir, "golden_fit.rds"))
 
 ## also save the 20x30 expression + aligned metadata for the equivalence test
 golden$expr <- expr_sub

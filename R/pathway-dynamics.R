@@ -138,9 +138,28 @@
     if (is.na(tt)) next
     sub <- traj_long[traj_long$time == tt & !is.na(traj_long$time), , drop = FALSE]
     sig <- sub[!is.na(sub$q_net) & sub$q_net < alpha, , drop = FALSE]
-    if (nrow(sig) >= 2L) {
-      signs <- sign(sig$NET)
-      if (any(signs > 0) && any(signs < 0)) n_div <- n_div + 1L
+    if (nrow(sig) >= 1L) {
+      sig_signs <- sign(sig$NET)
+      div_found <- FALSE
+      ## Case 1: two or more significant conditions with opposite signs
+      ## (strongest divergence signal — all conditions significant)
+      if (nrow(sig) >= 2L && any(sig_signs > 0) && any(sig_signs < 0)) {
+        div_found <- TRUE
+      }
+      ## Case 2: a significant condition has opposite sign from a
+      ## non-significant condition with a non-trivial NET (magnitude floor
+      ## prevents false positives from near-zero non-significant NETs)
+      if (!div_found) {
+        nonsig <- sub[is.na(sub$q_net) | sub$q_net >= alpha, , drop = FALSE]
+        if (nrow(nonsig) > 0L) {
+          if (any(sig_signs > 0) && any(nonsig$NET < -0.1, na.rm = TRUE))
+            div_found <- TRUE
+          if (!div_found && any(sig_signs < 0) &&
+              any(nonsig$NET > 0.1, na.rm = TRUE))
+            div_found <- TRUE
+        }
+      }
+      if (div_found) n_div <- n_div + 1L
     }
   }
   n_div
@@ -160,8 +179,9 @@
 #' remodels over time: \code{early_directional}, \code{gradual_remodeling},
 #' \code{delayed_opposition}, \code{transient_burst},
 #' \code{directional_delayed}, \code{sustained_remodeling}, or
-#' \code{no_dynamic_signal}. Also detects \code{divergent} pathways where
-#' conditions separate in NET direction.
+#' \code{no_dynamic_signal}. Cross-condition NET opposition is reported as
+#' the boolean column \code{is_divergent}, not as a \code{dynamic_state}
+#' label.
 #'
 #' This is the time-course-aware upgrade of \code{\link{tps_classify_pathways}}
 #' (which gives a single endpoint snapshot). Use with
@@ -219,6 +239,13 @@ tps_classify_pathway_dynamics <- function(calibrated, alpha = 0.05, coh_cut = 0.
       "format '<condition>_t<time>_vs_baseline' (from family='vs_baseline')."
     ))
   }
+  if (any(grepl("^endpoint_", meta$condition))) {
+    tps_abort(paste0(
+      "endpoint-family contrasts detected. tps_classify_pathway_dynamics ",
+      "requires family='vs_baseline' in tps_pathway_scores; endpoint family ",
+      "produces only one timepoint per condition."
+    ))
+  }
 
   ## build long table: one row per term x condition x time
   rows <- list()
@@ -241,7 +268,11 @@ tps_classify_pathway_dynamics <- function(calibrated, alpha = 0.05, coh_cut = 0.
       }
     }
   }
-  long <- do.call(rbind, rows)
+  long <- if (length(rows) > 0L) do.call(rbind, rows) else data.frame(
+    term = character(0), condition = character(0), time = numeric(0),
+    NET = numeric(0), REM = numeric(0), COH = numeric(0),
+    q_net = numeric(0), q_rem = numeric(0),
+    dynamic_state = character(0), stringsAsFactors = FALSE)
 
   ## detect divergence per pathway
   divergent_terms <- character(0)
@@ -293,10 +324,16 @@ tps_classify_pathway_dynamics <- function(calibrated, alpha = 0.05, coh_cut = 0.
 #' @param states a \code{tps_states} object.
 #' @param pathway_dynamics a data.frame from \code{tps_classify_pathway_dynamics}.
 #' @param term2gene pathway membership table (columns: term, gene).
-#' @param protein_ids optional character vector of protein ids aligned to
-#'   \code{states$state_table$feature_id}. If \code{NULL}, uses feature_id directly.
-#' @return a data.frame with columns: \code{protein_state, pathway_dynamic,
-#'   n_proteins, n_pathways, observed_overlap, expected_overlap, enrichment}.
+#' @param protein_ids optional character vector of pathway-space ids. If
+#'   \code{NULL}, \code{feature_id} is used. A \emph{named} vector is
+#'   reordered to \code{states$state_table$feature_id} (safer than a
+#'   positional vector, because the state table is sorted). An unnamed
+#'   vector must already be aligned to the state-table rows.
+#' @return a data.frame with columns: \code{protein_state},
+#'   \code{pathway_dynamic}, \code{n_proteins_in_state},
+#'   \code{n_pathways_in_dynamic}, \code{observed_overlap},
+#'   \code{expected_overlap}, \code{enrichment},
+#'   \code{p_hypergeometric}, \code{q_hypergeometric}.
 #'
 #' @examples
 #' data(tps_example, package = "timeProtState")
@@ -310,7 +347,10 @@ tps_classify_pathway_dynamics <- function(calibrated, alpha = 0.05, coh_cut = 0.
 #' ave <- rep(1, nrow(pws$statistic_matrix))
 #' pws_c <- tps_calibrate_pathways(pws, abundance = ave, n_perm = 10, seed = 1)
 #' dyn <- tps_classify_pathway_dynamics(pws_c)
-#' link <- tps_link_states_pathways(tps_classify_states(fit), dyn, tps_example_term2gene)
+#' ids <- stats::setNames(tps_example_annotation$locus_tag,
+#'                        tps_example_annotation$protein_id)
+#' link <- tps_link_states_pathways(tps_classify_states(fit), dyn,
+#'                                  tps_example_term2gene, protein_ids = ids)
 #' @export
 tps_link_states_pathways <- function(states, pathway_dynamics, term2gene,
                                       protein_ids = NULL) {
@@ -330,13 +370,25 @@ tps_link_states_pathways <- function(states, pathway_dynamics, term2gene,
       nrow(st) == 0L) {
     tps_abort("states$state_table must contain feature_id and state rows.")
   }
-  if (is.null(protein_ids)) protein_ids <- st$feature_id
-  protein_ids <- as.character(protein_ids)
+  if (is.null(protein_ids)) {
+    protein_ids <- as.character(st$feature_id)
+  } else {
+    id_names <- names(protein_ids)
+    protein_ids <- as.character(unname(protein_ids))
+    if (!is.null(id_names) && any(nzchar(id_names))) {
+      names(protein_ids) <- id_names
+      mapped <- protein_ids[as.character(st$feature_id)]
+      if (anyNA(mapped)) {
+        tps_abort("named protein_ids must cover every feature_id in states.")
+      }
+      protein_ids <- unname(as.character(mapped))
+    }
+  }
   if (length(protein_ids) != nrow(st) || anyNA(protein_ids) ||
       any(!nzchar(protein_ids)) || anyDuplicated(protein_ids)) {
     tps_abort(paste0(
       "protein_ids must be unique, non-empty, non-missing, and aligned ",
-      "with state rows."
+      "with state rows (or named by feature_id)."
     ))
   }
   st$.pathway_id <- protein_ids
@@ -365,6 +417,16 @@ tps_link_states_pathways <- function(states, pathway_dynamics, term2gene,
   ## analysis universe: proteins observed in the state table (NOT library)
   universe <- unique(st$.pathway_id)
   n_universe <- length(universe)
+  if (n_universe > 0L && length(unique(term2gene$gene)) > 0L) {
+    n_match <- length(intersect(universe, unique(term2gene$gene)))
+    if (n_match == 0L) {
+      tps_abort(paste0(
+        "protein_ids do not match any term2gene$gene; check namespace ",
+        "(e.g., locus_tag vs protein_id) or pass a named vector. ",
+        "Universe: ", paste(head(universe, 3), collapse = ", "),
+        "; term2gene genes: ", paste(head(unique(term2gene$gene), 3), collapse = ", "), "."))
+    }
+  }
 
   ## protein states
   prot_states <- unique(st$state)
@@ -530,13 +592,20 @@ tps_divergence_score <- function(calibrated, dyn = NULL, alpha = 0.05) {
       max_divergent_pair = max_pair, max_divergent_time = max_time,
       stringsAsFactors = FALSE)
   }
-  result <- do.call(rbind, rows)
+  result <- if (length(rows) > 0L) do.call(rbind, rows) else data.frame(
+    term = character(0), divergence_score = numeric(0),
+    n_divergent_timepoints = integer(0),
+    max_divergent_pair = character(0),
+    max_divergent_time = numeric(0),
+    stringsAsFactors = FALSE)
   attr(result, "provenance") <- list(
     stage = "divergence_score", alpha = alpha,
     timestamp = format(Sys.time(), "%Y-%m-%dT%H:%M:%S%z"),
     package_version = as.character(getNamespaceVersion("timeProtState")))
   result
-}## ---- permutation-calibrated dynamic states ---------------------------------
+}
+
+## ---- permutation-calibrated dynamic states ---------------------------------
 #' Calibrate pathway dynamic states with a permutation null
 #'
 #' Permutes protein labels within the calibrated pathway score universe and
@@ -554,20 +623,25 @@ tps_divergence_score <- function(calibrated, dyn = NULL, alpha = 0.05) {
 #' @param seed integer; RNG seed.
 #' @return a data.frame with the original dynamics plus a column
 #'   \code{p_dynamic} (empirical trajectory-level p-value) and
-#'   \code{q_dynamic} (BH-adjusted).
+#'   \code{q_dynamic} (BH-adjusted). BH adjustment is applied jointly across
+#'   all pathway-condition pairs (one p_dynamic per pathway-condition
+#'   trajectory; time is absorbed into the max statistic).
 #'
 #' @examples
-#' data(tps_example, package = "timeProtState")
-#' se <- tps_import(tps_example_abundance, tps_example_metadata,
-#'                  tps_example_annotation)
+#' sim <- tps_simulate_timecourse(
+#'   n_features = 24, conditions = c("A", "B"), times = c(1, 3),
+#'   n_replicates = 2, effect_mix = c(null = 1), seed = 1)
+#' se <- tps_import(sim$abundance, sim$col_data)
 #' design <- tps_make_design(se)
-#' contrasts <- tps_make_contrasts(design, endpoint = 7)
+#' contrasts <- tps_make_contrasts(design, endpoint = 3)
 #' fit <- tps_fit(se, design, contrasts)
-#' pws <- tps_pathway_scores(fit, tps_example_term2gene,
-#'                            id_col = "locus_tag", family = "vs_baseline")
-#' ave <- rep(1, nrow(pws$statistic_matrix))
-#' pws_c <- tps_calibrate_pathways(pws, abundance = ave, n_perm = 10, seed = 1)
-#' dyn_cal <- tps_calibrate_dynamics(pws_c, n_perm = 10, seed = 1)
+#' t2g <- data.frame(term = "pw1", gene = rownames(sim$abundance)[1:8],
+#'                   stringsAsFactors = FALSE)
+#' pws <- tps_pathway_scores(fit, t2g, family = "vs_baseline", min_size = 5)
+#' pws_c <- tps_calibrate_pathways(pws, mode = "unstratified",
+#'                                 n_perm = 5, seed = 1)
+#' dyn_cal <- tps_calibrate_dynamics(pws_c, n_perm = 5, seed = 1)
+#' nrow(dyn_cal)
 #' @export
 tps_calibrate_dynamics <- function(calibrated, n_perm = 500L, alpha = 0.05,
                                     coh_cut = 0.5, seed = 1L) {
@@ -603,6 +677,15 @@ tps_calibrate_dynamics <- function(calibrated, n_perm = 500L, alpha = 0.05,
   net_null_sd <- calibrated$net_null_sd
   rem_null_mean <- calibrated$rem_null_mean
   rem_null_sd <- calibrated$rem_null_sd
+  ## Observed scores use the parent VIF so correlated members are not treated
+  ## as independent (ADR 0010). The permutation stream remains uncorrelated.
+  vif <- calibrated$vif
+  if (is.null(vif) || !identical(calibrated$intergene, "vif")) {
+    vif <- rep(1, nrow(calibrated$scores$NET))
+  }
+  vif_scale <- sqrt(pmax(as.numeric(vif), 1))
+  net_sd_obs <- sweep(net_null_sd, 1L, vif_scale, `*`)
+  rem_sd_obs <- sweep(rem_null_sd, 1L, vif_scale, `*`)
   ## The observed statistic is the maximum standardized NET/REM departure over
   ## time for each pathway-condition pair. The permutation maximum automatically
   ## accounts for searching across timepoints and both evidence components.
@@ -610,9 +693,12 @@ tps_calibrate_dynamics <- function(calibrated, n_perm = 500L, alpha = 0.05,
   if (anyNA(meta$time)) {
     tps_abort("Could not parse every contrast as '<condition>_t<time>_vs_baseline'.")
   }
+  if (any(grepl("^endpoint_", meta$condition))) {
+    tps_abort("endpoint-family contrasts detected; use family='vs_baseline' in tps_pathway_scores.")
+  }
   observed_score <- .dynamic_evidence_score(
     calibrated$scores$NET, calibrated$scores$REM,
-    net_null_mean, net_null_sd, rem_null_mean, rem_null_sd, meta, eps
+    net_null_mean, net_sd_obs, rem_null_mean, rem_sd_obs, meta, eps
   )
   null_count <- setNames(rep(0L, length(observed_score)), names(observed_score))
 
@@ -650,10 +736,15 @@ tps_calibrate_dynamics <- function(calibrated, n_perm = 500L, alpha = 0.05,
   dyn_obs$p_dynamic <- p_dynamic[dyn_obs$key]
   dyn_obs$q_dynamic <- q_dynamic[dyn_obs$key]
   dyn_obs$key <- NULL
+  ## preserve the classify_pathway_dynamics provenance from the internal call,
+  ## then append the calibrate_dynamics entry (do not overwrite).
+  classify_prov <- attr(dyn_obs, "provenance")
   attr(dyn_obs, "provenance") <- list(
-    stage = "calibrate_dynamics", n_perm = n_perm, alpha = alpha,
-    coh_cut = coh_cut, seed = seed,
-    timestamp = format(Sys.time(), "%Y-%m-%dT%H:%M:%S%z"),
-    package_version = as.character(getNamespaceVersion("timeProtState")))
+    classify_pathway_dynamics = classify_prov,
+    calibrate_dynamics = list(
+      stage = "calibrate_dynamics", n_perm = n_perm, alpha = alpha,
+      coh_cut = coh_cut, seed = seed,
+      timestamp = format(Sys.time(), "%Y-%m-%dT%H:%M:%S%z"),
+      package_version = as.character(getNamespaceVersion("timeProtState"))))
   dyn_obs
 }

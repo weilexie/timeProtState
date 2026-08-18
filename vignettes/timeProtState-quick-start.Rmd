@@ -30,7 +30,7 @@ proteomics** experiments. It converts a protein-level abundance matrix into:
 2. **Transparent protein dynamic states** decomposed into temporal,
    condition-heterogeneity, and direction evidence axes.
 3. **Permutation-calibrated pathway directional/remodeling states**
-   (NET / REM / COH), with abundance-stratified null for better calibration.
+   (NET / REM / COH), with an abundance-stratified null.
 
 This vignette walks through the full pipeline on a small synthetic example.
 
@@ -86,6 +86,27 @@ legacy_rule <- tps_decision_rule(
 )
 ```
 
+## Repeated measures (optional)
+
+When the same biological subject is followed across time points (for example,
+a longitudinal heat-shock series with individuals A-D sampled at every time
+point), pass a `block` argument so `limma::lmFit` accounts for within-subject
+correlation. The consensus correlation is estimated with
+`limma::duplicateCorrelation()` when `correlation` is left `NULL`:
+
+```{r block, eval = FALSE}
+## Only when 'subject_id' identifies the SAME biological unit over time.
+fit_rm <- tps_fit(se, design, contrasts, block = "subject_id")
+fit_rm$thresholds$correlation          # estimated consensus correlation
+fit_rm$thresholds$correlation_source   # "estimated" or "supplied"
+```
+
+The synthetic `tps_example` ships a `replicate` column, but its semantics are
+ambiguous (the label could denote either independent replicate numbering or a
+followed subject), so `tps_fit` does not use it as a block by default. Supply
+`block` only when your metadata genuinely records repeated measures on the
+same biological units.
+
 ## Trajectories and clustering
 
 ```{r traj}
@@ -112,6 +133,8 @@ ave <- as.numeric(tapply(
          levels = rownames(pws$statistic_matrix)),
   function(x) x[1]
 ))
+## The default intergene = "vif" applies inter-gene VIF adjustment; use
+## intergene = "none" for the historical unadjusted permutation.
 pws_c <- tps_calibrate_pathways(pws, abundance = ave, n_perm = 200, seed = 1)
 
 ## Classify pathway remodeling dynamics across the time course
@@ -125,6 +148,21 @@ table(dyn$dynamic_state)
 
 For a single-timepoint (endpoint-only) analysis, use `family = "endpoint"`
 and `tps_classify_pathways()` instead.
+
+## Correlated-pathway simulation
+
+`tps_simulate_correlated_pathways()` builds a shared-baseline design with
+disjoint pathways and compound-symmetric within-pathway correlation
+(`within_pathway_cor`). Use `pathway_signal = "none"` for type-I checks,
+`"codirectional"` for NET, and `"mixed"` for REM. The returned
+`term2gene` table can be passed directly to `tps_pathway_scores()`.
+
+```{r sim-cor, eval = FALSE}
+sim <- tps_simulate_correlated_pathways(
+  n_pathways = 8, pathway_size = 6, n_background = 20,
+  within_pathway_cor = 0.5, pathway_signal = "none", seed = 1
+)
+```
 
 ## Visualization
 

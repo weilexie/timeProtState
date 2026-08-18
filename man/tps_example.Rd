@@ -9,7 +9,7 @@
 \alias{tps_example_term2gene}
 \title{Example time-course proteomics data}
 \format{
-A list of four objects:
+Four objects loaded by \code{data(tps_example)} (not a single list):
   \describe{
     \item{tps_example_abundance}{200 x 30 numeric matrix of log2 abundance.}
     \item{tps_example_metadata}{data.frame of 30 samples.}
@@ -22,8 +22,9 @@ data(tps_example, package = "timeProtState")
 }
 \description{
 Small synthetic dataset mirroring the structure of a shared-baseline
-multi-condition time-course experiment (3 conditions x 4 timepoints x 3
-replicates, shared day-0 baseline). Used in all package examples and tests.
+multi-condition time-course experiment: one shared day-0 baseline group
+plus three conditions at times 1/3/7, three replicates per cell
+(200 features x 30 samples). Used in package examples and tests.
 }
 \examples{
 data(tps_example, package = "timeProtState")

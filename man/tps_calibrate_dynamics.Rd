@@ -26,7 +26,9 @@ tps_calibrate_dynamics(
 \value{
 a data.frame with the original dynamics plus a column
   \code{p_dynamic} (empirical trajectory-level p-value) and
-  \code{q_dynamic} (BH-adjusted).
+  \code{q_dynamic} (BH-adjusted). BH adjustment is applied jointly across
+  all pathway-condition pairs (one p_dynamic per pathway-condition
+  trajectory; time is absorbed into the max statistic).
 }
 \description{
 Permutes protein labels within the calibrated pathway score universe and
@@ -38,15 +40,18 @@ label; p_dynamic tests departure from the trajectory null, not the
 probability of a particular label.
 }
 \examples{
-data(tps_example, package = "timeProtState")
-se <- tps_import(tps_example_abundance, tps_example_metadata,
-                 tps_example_annotation)
+sim <- tps_simulate_timecourse(
+  n_features = 24, conditions = c("A", "B"), times = c(1, 3),
+  n_replicates = 2, effect_mix = c(null = 1), seed = 1)
+se <- tps_import(sim$abundance, sim$col_data)
 design <- tps_make_design(se)
-contrasts <- tps_make_contrasts(design, endpoint = 7)
+contrasts <- tps_make_contrasts(design, endpoint = 3)
 fit <- tps_fit(se, design, contrasts)
-pws <- tps_pathway_scores(fit, tps_example_term2gene,
-                           id_col = "locus_tag", family = "vs_baseline")
-ave <- rep(1, nrow(pws$statistic_matrix))
-pws_c <- tps_calibrate_pathways(pws, abundance = ave, n_perm = 10, seed = 1)
-dyn_cal <- tps_calibrate_dynamics(pws_c, n_perm = 10, seed = 1)
+t2g <- data.frame(term = "pw1", gene = rownames(sim$abundance)[1:8],
+                  stringsAsFactors = FALSE)
+pws <- tps_pathway_scores(fit, t2g, family = "vs_baseline", min_size = 5)
+pws_c <- tps_calibrate_pathways(pws, mode = "unstratified",
+                                n_perm = 5, seed = 1)
+dyn_cal <- tps_calibrate_dynamics(pws_c, n_perm = 5, seed = 1)
+nrow(dyn_cal)
 }

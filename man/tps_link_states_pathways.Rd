@@ -18,12 +18,18 @@ tps_link_states_pathways(
 
 \item{term2gene}{pathway membership table (columns: term, gene).}
 
-\item{protein_ids}{optional character vector of protein ids aligned to
-\code{states$state_table$feature_id}. If \code{NULL}, uses feature_id directly.}
+\item{protein_ids}{optional character vector of pathway-space ids. If
+\code{NULL}, \code{feature_id} is used. A \emph{named} vector is
+reordered to \code{states$state_table$feature_id} (safer than a
+positional vector, because the state table is sorted). An unnamed
+vector must already be aligned to the state-table rows.}
 }
 \value{
-a data.frame with columns: \code{protein_state, pathway_dynamic,
-  n_proteins, n_pathways, observed_overlap, expected_overlap, enrichment}.
+a data.frame with columns: \code{protein_state},
+  \code{pathway_dynamic}, \code{n_proteins_in_state},
+  \code{n_pathways_in_dynamic}, \code{observed_overlap},
+  \code{expected_overlap}, \code{enrichment},
+  \code{p_hypergeometric}, \code{q_hypergeometric}.
 }
 \description{
 Produces a consistency diagnosis linking protein evidence states (from
@@ -50,5 +56,8 @@ pws <- tps_pathway_scores(fit, tps_example_term2gene,
 ave <- rep(1, nrow(pws$statistic_matrix))
 pws_c <- tps_calibrate_pathways(pws, abundance = ave, n_perm = 10, seed = 1)
 dyn <- tps_classify_pathway_dynamics(pws_c)
-link <- tps_link_states_pathways(tps_classify_states(fit), dyn, tps_example_term2gene)
+ids <- stats::setNames(tps_example_annotation$locus_tag,
+                       tps_example_annotation$protein_id)
+link <- tps_link_states_pathways(tps_classify_states(fit), dyn,
+                                 tps_example_term2gene, protein_ids = ids)
 }

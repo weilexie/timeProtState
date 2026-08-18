@@ -23,9 +23,13 @@
 #' Construct a timeProtState experiment object
 #'
 #' Builds a \code{\link[SummarizedExperiment]{SummarizedExperiment}} from a
-#' protein-by-sample abundance matrix and sample metadata, enforcing the
-#' data contract required by the rest of the package: a shared baseline,
-#' numeric time, estimable condition-by-time groups, and aligned ids.
+#' protein-by-sample abundance matrix and sample metadata, checking the
+#' data contract required by the rest of the package: numeric time,
+#' estimable condition-by-time groups, and aligned ids. A shared baseline
+#' (one baseline time and one baseline condition label) is reported by
+#' \code{\link{tps_validate}}; non-shared baselines warn at import and are
+#' rejected later by \code{\link{tps_make_contrasts}} and
+#' \code{\link{tps_trajectory_matrix}}.
 #'
 #' Imputation is NOT performed at import (missing values are preserved).
 #' Missing values are preserved and surface naturally in downstream limma
@@ -139,6 +143,12 @@ tps_import <- function(abundance, col_data, row_data = NULL,
   }
   if (anyDuplicated(rownames(col_data))) {
     tps_abort("col_data row names must be unique sample ids.")
+  }
+  ## Enforce the documented invariant: rownames must equal sample_id values.
+  ## Without this, manual rownames matching abundance colnames but with
+  ## mismatched sample_id would silently produce a corrupt SE.
+  if (!identical(rownames(col_data), as.character(col_data$sample_id))) {
+    tps_abort("col_data row names must equal col_data$sample_id; got mismatched values.")
   }
 
   ## Align samples: colnames(abundance) <-> col_data row order.

@@ -26,7 +26,9 @@ tps_pathway_scores(
 \code{"logFC"}, or \code{"signed_log10p"}.}
 
 \item{family}{character; if \code{fit} is a \code{tps_fit}, restrict to this
-contrast family (e.g. \code{"endpoint"}). Ignored if a matrix is supplied.}
+contrast family (e.g. \code{"vs_baseline"} or \code{"endpoint"}). If
+\code{NULL}, every single-contrast (t) family is pooled, which can
+double-count the same algebraic contrast. Ignored if a matrix is supplied.}
 
 \item{id_col}{character; if feature ids in the fit come from a rowData column
 (e.g. locus tags) rather than row names, name that column. If \code{NULL},
@@ -53,6 +55,12 @@ the deterministic layer; permutation calibration is applied separately via
 \code{\link{tps_calibrate_pathways}}.
 }
 \details{
+The scores are: \code{NET = mean(t)}, \code{REM = mean(|t|)},
+\code{COH = |NET| / (REM + eps)}. COH is a magnitude-weighted coherence
+measure in [0,1]: it equals 1 when all members share the same direction
+and approaches 0 when opposing directions cancel. This is not a simple
+count-based fraction of same-sign members; it weights by magnitude.
+
 Pathways with fewer than \code{min_size} observed members (intersected with
 the analysis universe) are dropped.
 }

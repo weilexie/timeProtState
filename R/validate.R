@@ -49,19 +49,14 @@ tps_validate <- function(se, action = c("report", "abort", "warn")) {
   issues <- new.env(parent = emptyenv())
   issues$errors <- character(0)
   issues$warnings <- character(0)
-  ## messages may be supplied as a paste0-able template split across several
-  ## string args followed by sprintf args. We fold consecutive character
-  ## fragments into one template, then sprintf over the remaining args.
+  ## The first argument is always the sprintf template; remaining args
+  ## (character or numeric) are sprintf values. This avoids the old
+  ## is.character() heuristic that mangled %s when all args were character.
   fold_msg <- function(...) {
     args <- list(...)
-    is_chr <- vapply(args, is.character, logical(1L))
-    ## leading run of character args = template fragments; the rest = values
-    n_tmpl <- 0L
-    for (k in seq_along(args)) {
-      if (is_chr[k]) n_tmpl <- k else break
-    }
-    tmpl <- paste0(args[seq_len(n_tmpl)], collapse = "")
-    vals <- if (n_tmpl < length(args)) args[(n_tmpl + 1L):length(args)] else list()
+    if (length(args) == 0L) return(character(0L))
+    tmpl <- args[[1L]]
+    vals <- if (length(args) > 1L) args[-1L] else list()
     if (length(vals)) do.call(sprintf, c(list(tmpl), vals)) else tmpl
   }
   add_err <- function(...) {
@@ -74,7 +69,14 @@ tps_validate <- function(se, action = c("report", "abort", "warn")) {
   cd <- as.data.frame(SummarizedExperiment::colData(se))
   assay_name <- S4Vectors::metadata(se)$timeProtState$assay_name
   if (is.null(assay_name)) assay_name <- "log2_abundance"
-  expr <- SummarizedExperiment::assay(se, assay_name)
+  if (!assay_name %in% SummarizedExperiment::assayNames(se)) {
+    add_err("assay_name '%s' not found in assays (%s).",
+            assay_name,
+            paste(SummarizedExperiment::assayNames(se), collapse = ", "))
+    expr <- SummarizedExperiment::assay(se, 1)
+  } else {
+    expr <- SummarizedExperiment::assay(se, assay_name)
+  }
 
   ## ---- check 1: required columns in colData ------------------------------
   missing_cols <- setdiff(tps_required_metadata_cols(), names(cd))
@@ -126,6 +128,8 @@ tps_validate <- function(se, action = c("report", "abort", "warn")) {
   if ("time" %in% names(cd) && baseline_flag_ok) {
     tv <- cd$time
     if (is.numeric(tv) && all(is.finite(tv))) {
+      if (any(tv < 0)) add_warn("time contains %d negative value(s); the package assumes forward time progression.",
+                                sum(tv < 0))
       time_levels <- sort(unique(tv))
     } else {
       add_err("time must contain fully observed, finite numeric values.")
@@ -202,7 +206,7 @@ tps_validate <- function(se, action = c("report", "abort", "warn")) {
     design_summary$min_replicates <- min(grp_tab)
   }
 
-  ## ---- check 7: all-NA proteins ------------------------------------------
+  ## ---- check 7: all-NA proteins and samples -------------------------------
   all_na <- rownames(expr)[apply(is.na(expr), 1L, all)]
   if (length(all_na)) {
     add_warn(paste0(length(all_na),
@@ -211,6 +215,11 @@ tps_validate <- function(se, action = c("report", "abort", "warn")) {
                     paste(head(all_na, 5L), collapse = ", "), "."))
   }
   design_summary$n_all_na_proteins <- length(all_na)
+  all_na_samples <- colnames(expr)[apply(is.na(expr), 2L, all)]
+  if (length(all_na_samples)) {
+    add_err("Sample(s) are all-NA across all proteins: %s. Remove or fix them before fitting.",
+            paste(head(all_na_samples, 5L), collapse = ", "))
+  }
   if (any(is.infinite(expr))) {
     add_err("assay contains %d infinite value(s); replace them with NA or finite values.",
             sum(is.infinite(expr)))

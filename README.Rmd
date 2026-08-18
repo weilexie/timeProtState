@@ -8,8 +8,8 @@ output: github_document
 > Contrast-aware dynamic state analysis for time-course proteomics
 
 `timeProtState` is an R/Bioconductor-style package for analyzing
-**shared-baseline, multi-condition time-course proteomics** experiments. It
-provides:
+**shared-baseline, multi-condition time-course proteomics** experiments.
+It provides:
 
 - **Shared-baseline contrast grammar**: automatic construction of estimable,
   full-rank contrast families from a saturated group-means design (baseline
@@ -17,14 +17,18 @@ provides:
 - **Evidence-decomposed protein states**: temporal, condition-heterogeneity,
   and direction axes combined into auditable state labels.
 - **Permutation-calibrated pathway states**: NET (net direction), REM
-  (remodeling magnitude), COH (coherence), with abundance-stratified null.
+  (remodeling magnitude), COH (coherence), with an abundance-stratified
+  null and a default inter-gene VIF adjustment for member correlation.
+- **Optional repeated measures**: `tps_fit(block, correlation)` passes a
+  subject block to `limma::lmFit`; the consensus correlation is estimated
+  with `limma::duplicateCorrelation()` when `correlation` is omitted.
+- **Correlated-pathway simulation**: `tps_simulate_correlated_pathways()`
+  generates known-truth data with compound-symmetric within-pathway
+  correlation for type-I / power checks.
 
 ## Installation
 
 ```r
-# Once on Bioconductor (devel):
-# BiocManager::install("timeProtState")
-
 # From a local clone/source directory:
 # remotes::install_local(".")
 ```
@@ -44,8 +48,30 @@ states <- tps_classify_states(fit)
 states
 ```
 
-See the vignettes for the full pipeline including pathway analysis and
-visualization.
+When the same biological unit is followed over time, pass `block` (a
+`colData` column or a sample-aligned vector). The package does not treat
+a column named `replicate` as a block by default.
+
+```r
+## Only when subject_id identifies the SAME biological unit over time.
+# fit_rm <- tps_fit(se, design, contrasts, block = "subject_id")
+```
+
+See the vignettes for pathway analysis (`family = "vs_baseline"`),
+visualization, and `tps_simulate_correlated_pathways()`.
+
+## Public evidence path
+
+Package examples and tests use the synthetic `tps_example` object (200
+features × 30 samples). The default public validation sequence is
+documented in `05_validation/02_timeProtState-paper/README.md`:
+
+- PXD006262 (single-condition longitudinal) —
+  `scripts/15_PXD006262_closest_longitudinal.R`
+- PXD065583 (multi-condition shared baseline) —
+  `scripts/21_PXD065583_ASO_benchmark.R`
+- correlated-pathway simulation —
+  `scripts/13_simulation_correlation_benchmark.R`
 
 ## Scope
 

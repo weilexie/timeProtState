@@ -34,9 +34,13 @@ a \code{SummarizedExperiment} with provenance recorded in
 }
 \description{
 Builds a \code{\link[SummarizedExperiment]{SummarizedExperiment}} from a
-protein-by-sample abundance matrix and sample metadata, enforcing the
-data contract required by the rest of the package: a shared baseline,
-numeric time, estimable condition-by-time groups, and aligned ids.
+protein-by-sample abundance matrix and sample metadata, checking the
+data contract required by the rest of the package: numeric time,
+estimable condition-by-time groups, and aligned ids. A shared baseline
+(one baseline time and one baseline condition label) is reported by
+\code{\link{tps_validate}}; non-shared baselines warn at import and are
+rejected later by \code{\link{tps_make_contrasts}} and
+\code{\link{tps_trajectory_matrix}}.
 }
 \details{
 Imputation is NOT performed at import (missing values are preserved).

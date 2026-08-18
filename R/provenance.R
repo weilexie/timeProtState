@@ -86,14 +86,15 @@ digest_list <- function(x) {
 tps_provenance <- function(object) {
   if (inherits(object, "SummarizedExperiment")) {
     md <- S4Vectors::metadata(object)$timeProtState
-  } else if (is.list(object) && "provenance" %in% names(object)) {
-    md <- object
-  } else if (is.list(object) && "timeProtState" %in% names(object)) {
-    md <- object$timeProtState
   } else if (!is.null(attr(object, "provenance"))) {
     ## data.frame results from tps_classify_pathways, tps_classify_pathway_dynamics,
     ## tps_divergence_score, tps_link_states_pathways, tps_calibrate_dynamics
     return(attr(object, "provenance"))
+  } else if (is.list(object) && !is.data.frame(object) &&
+             "provenance" %in% names(object)) {
+    md <- object
+  } else if (is.list(object) && "timeProtState" %in% names(object)) {
+    md <- object$timeProtState
   } else {
     return(NULL)
   }

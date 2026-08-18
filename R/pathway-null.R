@@ -12,6 +12,9 @@
 ## ---- stratification helpers ------------------------------------------------
 .make_abundance_bins <- function(abundance, n_bins) {
   ## equal-frequency bins over abundance (AveExpr); returns integer bin per protein
+  if (anyNA(abundance)) {
+    tps_abort("abundance must not contain NA for bin assignment.")
+  }
   if (length(unique(abundance)) < n_bins) {
     ## too few distinct values; fall back to as many bins as distinct values
     n_bins <- length(unique(abundance))
@@ -54,6 +57,40 @@
   tps_abort("unknown permutation mode: %s", mode)
 }
 
+## Mean pairwise correlation of member *residuals across samples* after
+## the group-means fit. Residual correlation is the competitive extra
+## covariance that label permutation destroys. Do not estimate rho from
+## moderated-t profiles: a shared pathway effect would be mistaken for
+## noise correlation and the real NET would be over-corrected.
+.estimate_pathway_rho <- function(resid_mat, membership) {
+  n_path <- nrow(membership)
+  rho <- rep(0, n_path)
+  if (is.null(resid_mat) || !is.matrix(resid_mat) ||
+      ncol(resid_mat) < 4L || n_path < 1L) {
+    return(rho)
+  }
+  if (nrow(resid_mat) != ncol(membership)) {
+    return(rho)
+  }
+  for (p in seq_len(n_path)) {
+    idx <- which(as.numeric(membership[p, ]) != 0)
+    if (length(idx) < 3L) next
+    S <- resid_mat[idx, , drop = FALSE]
+    keep <- apply(is.finite(S), 1L, function(r) sum(r) >= 4L)
+    S <- S[keep, , drop = FALSE]
+    if (nrow(S) < 3L) next
+    C <- suppressWarnings(stats::cor(t(S), use = "pairwise.complete.obs"))
+    off <- C[upper.tri(C)]
+    off <- off[is.finite(off)]
+    rho[p] <- if (length(off)) mean(off) else 0
+  }
+  pmax(0, pmin(rho, 0.99))
+}
+
+.pathway_vif <- function(rho, sizes) {
+  1 + pmax(as.numeric(sizes) - 1, 0) * pmax(as.numeric(rho), 0)
+}
+
 ## ---- tps_calibrate_pathways ------------------------------------------------
 #' Calibrate pathway scores with a permutation null
 #'
@@ -67,6 +104,17 @@
 #' bin. One shared permutation index retains overlap among pathway definitions;
 #' stratification reduces differences in abundance distributions but does not
 #' preserve within-pathway protein covariance.
+#'
+#' \code{intergene = "vif"} (the default) estimates each pathway's mean
+#' pairwise residual correlation across samples (after the group-means
+#' fit) and scales the observed NET / REM excess by \code{1/sqrt(VIF)}
+#' before the permutation comparison, with
+#' \code{VIF = 1 + (k - 1) * rho}. Residuals come from
+#' \code{\link{tps_fit}} via \code{\link{tps_pathway_scores}}. This is
+#' the competitive correction for member correlation that label
+#' permutation otherwise destroys (ADR 0010). \code{intergene = "none"}
+#' is the historical unadjusted permutation (ADR 0005). VIF is 1 when
+#' residuals are unavailable (for example a bare statistic matrix).
 #'
 #' @param scores a \code{tps_pathway_scores} object from
 #'   \code{\link{tps_pathway_scores}}.
@@ -84,8 +132,22 @@
 #' @param correction character; \code{"per_contrast"} (default) applies BH
 #'   within each contrast, \code{"global"} applies BH across all
 #'   pathway x contrast tests (more conservative for multi-timepoint designs).
+#' @param intergene character; \code{"vif"} (default) applies the inter-gene
+#'   variance inflation, or \code{"none"} for the unadjusted permutation.
+#' @param vif_cap numeric; upper bound on the VIF to prevent over-correction
+#'   when pathway size is large and estimated rho is high (default \code{Inf},
+#'   no cap). The compound-symmetric VIF \code{1 + (k-1)*rho} grows linearly
+#'   with pathway size. Real proteomics data show highly variable VIF:
+#'   PXD065583 (human ASO) median VIF=1.66, only 12% of pathways exceed 3;
+#'   PXD006262 (yeast heat-shock) median VIF=5.43, 82% exceed 3. A cap of 3-4
+#'   is reasonable for datasets with moderate pathway correlation (rho < 0.1)
+#'   but will over-correct high-correlation data. Users should inspect the
+#'   \code{$vif} field and choose a cap based on their data's rho distribution.
+#'   Simulation (rho=0.5, k=10): cap=3 gives type-I 0.055 + power 0.590;
+#'   uncapped gives type-I 0.000 + power 0.060.
 #' @return a list of class \code{tps_pathway_calibrated} extending the input
-#'   with \code{p_net}, \code{p_rem}, \code{q_net}, \code{q_rem}, null summaries.
+#'   with \code{p_net}, \code{p_rem}, \code{q_net}, \code{q_rem}, null summaries,
+#'   and (when \code{intergene = "vif"}) \code{intergene_cor} and \code{vif}.
 #' @export
 #' @examples
 #' data(tps_example, package = "timeProtState")
@@ -101,12 +163,20 @@
 tps_calibrate_pathways <- function(scores, abundance = NULL, n_perm = 1000L,
                                     mode = c("abundance_stratified","unstratified"),
                                     n_bins = 4L, seed = 1L,
-                                    correction = c("per_contrast","global")) {
+                                    correction = c("per_contrast","global"),
+                                    intergene = c("vif", "none"),
+                                    vif_cap = Inf) {
   mode <- match.arg(mode)
   correction <- match.arg(correction)
+  intergene <- match.arg(intergene)
+  if (!is.numeric(vif_cap) || length(vif_cap) != 1L || is.na(vif_cap) ||
+      vif_cap < 1) {
+    tps_abort("vif_cap must be one numeric value >= 1 (use Inf for no cap).")
+  }
   arg_capture <- list(call = "tps_calibrate_pathways", n_perm = n_perm,
                        mode = mode, n_bins = n_bins, seed = seed,
-                       correction = correction,
+                       correction = correction, intergene = intergene,
+                       vif_cap = vif_cap,
                        timestamp = format(Sys.time(), "%Y-%m-%dT%H:%M:%S%z"))
   if (!inherits(scores, "tps_pathway_scores")) {
     tps_abort("scores must be a tps_pathway_scores object.")
@@ -200,18 +270,44 @@ tps_calibrate_pathways <- function(scores, abundance = NULL, n_perm = 1000L,
   dimnames(rem_null_mean) <- dimnames(obs_rem)
   dimnames(rem_null_sd) <- dimnames(obs_rem)
 
+  ## Inter-gene VIF: label permutation destroys member correlation, so the
+  ## permutation scale is too small when rho > 0. Scale the observed
+  ## departure (ADR 0010). intergene='none' keeps the ADR 0005 p-values.
+  ## vif_cap limits the VIF to prevent over-correction in large pathways
+  ## with high estimated rho (the compound-symmetric VIF grows linearly
+  ## with k, which can over-penalize real signal).
+  intergene_cor <- .estimate_pathway_rho(scores$residuals, M)
+  vif <- .pathway_vif(intergene_cor, sizes)
+  if (!identical(intergene, "vif")) {
+    intergene_cor[] <- 0
+    vif[] <- 1
+  }
+  vif <- pmin(vif, vif_cap)
+  vif_mat <- matrix(vif, nrow = n_path, ncol = n_contr)
+  vif_scale <- sqrt(pmax(vif_mat, 1))
+
   ## A two-sided permutation test must be centered on the permutation-null
   ## mean. Comparing |NET| directly with |NET_null| is biased when the whole
   ## protein universe has a directional shift. Replay the deterministic
   ## permutation stream now that the null centers are known.
   net_null_ge <- matrix(0.0, n_path, n_contr)
-  observed_net_departure <- abs(obs_net - net_null_mean)
+  observed_net_departure <- abs(obs_net - net_null_mean) / vif_scale
+  ## REM must also use a centered second-pass comparison, consistent with
+  ## NET. Previously (ADR 0005), REM retained the first-pass uncentered
+  ## comparison, which was inconsistent with the centered NET test and
+  ## biased when the protein universe has a directional shift.
+  rem_null_ge <- matrix(0.0, n_path, n_contr)
+  observed_rem_excess <- pmax(obs_rem - rem_null_mean, 0) / vif_scale
   withr::with_seed(seed, {
     for (b in seq_len(n_perm)) {
       idx <- .perm_index(n_prot, mode, bin_list, bin_template)
-      net_b <- as.matrix(Mt %*% stat_mat[idx, , drop = FALSE]) / sizes
+      Tp <- stat_mat[idx, , drop = FALSE]
+      net_b <- as.matrix(Mt %*% Tp) / sizes
+      rem_b <- as.matrix(Mt %*% abs_stat[idx, , drop = FALSE]) / sizes
       net_null_ge <- net_null_ge +
         (abs(net_b - net_null_mean) >= observed_net_departure - eps)
+      rem_null_ge <- rem_null_ge +
+        (pmax(rem_b - rem_null_mean, 0) >= observed_rem_excess - eps)
     }
   })
 
@@ -240,6 +336,10 @@ tps_calibrate_pathways <- function(scores, abundance = NULL, n_perm = 1000L,
   out$abundance_bins <- if (mode == "abundance_stratified") ave_bin else NULL
   out$provenance <- combined_prov
   out$correction <- correction
+  out$intergene <- intergene
+  out$intergene_cor <- setNames(intergene_cor, rownames(obs_net))
+  out$vif <- setNames(vif, rownames(obs_net))
+  out$vif_cap <- vif_cap
   class(out) <- c("tps_pathway_calibrated", class(scores))
   out
 }
@@ -323,7 +423,11 @@ tps_classify_pathways <- function(calibrated, alpha = 0.05, coh_cut = 0.5) {
         stringsAsFactors = FALSE)
     }
   }
-  result <- do.call(rbind, rows)
+  result <- if (length(rows) > 0L) do.call(rbind, rows) else data.frame(
+    term = character(0), contrast = character(0), size = integer(0),
+    NET = numeric(0), REM = numeric(0), COH = numeric(0),
+    q_net = numeric(0), q_rem = numeric(0),
+    state = character(0), stringsAsFactors = FALSE)
   attr(result, "provenance") <- list(
     stage = "classify_pathways", alpha = alpha, coh_cut = coh_cut,
     timestamp = format(Sys.time(), "%Y-%m-%dT%H:%M:%S%z"),
@@ -339,6 +443,13 @@ print.tps_pathway_calibrated <- function(x, ...) {
               nrow(x$scores$NET), ncol(x$scores$NET), x$n_perm, x$mode))
   if (x$mode == "abundance_stratified") {
     cat(sprintf("  abundance bins: %d\n", x$n_bins))
+  }
+  ig <- if (!is.null(x$intergene)) x$intergene else "none"
+  if (identical(ig, "vif") && !is.null(x$vif)) {
+    cat(sprintf("  intergene: vif   median VIF: %.2f   median rho: %.2f\n",
+                stats::median(x$vif), stats::median(x$intergene_cor)))
+  } else {
+    cat(sprintf("  intergene: %s\n", ig))
   }
   invisible(x)
 }

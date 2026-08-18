@@ -137,10 +137,12 @@ tps_export <- function(output_dir, fit = NULL, states = NULL,
     }
     for (nm in c("p_net", "p_rem", "q_net", "q_rem",
                  "net_null_mean", "net_null_sd",
-                 "rem_null_mean", "rem_null_sd")) {
+                 "rem_null_mean", "rem_null_sd",
+                 "intergene_cor", "vif")) {
       m <- pathway_scores[[nm]]
-      if (!is.null(m)) {
-        write_tbl(matrix_table(m, "term"), sprintf("pathway_%s.csv", nm))
+      if (!is.null(m) && is.numeric(m) && length(m) > 0L) {
+        write_tbl(matrix_table(matrix(m, ncol = 1, dimnames = list(names(m), nm)),
+                               "term"), sprintf("pathway_%s.csv", nm))
       }
     }
     write_tbl(pathway_scores, "pathway_scores.rds")

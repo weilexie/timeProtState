@@ -37,8 +37,9 @@ a list of class \code{tps_design} with components:
 Builds a no-intercept cell-means design matrix from the experimental design
 encoded in a \code{\link[SummarizedExperiment]{SummarizedExperiment}}
 produced by \code{\link{tps_import}}. For a shared-baseline design (all
-baseline rows at one timepoint), the baseline collapses to a single cell
-shared by all conditions; otherwise a general group-means model is used.
+baseline rows share one timepoint \emph{and} one condition label), the
+baseline collapses to a single cell shared by all conditions. Contrast
+and trajectory constructors require that shared-baseline structure.
 }
 \examples{
 data(tps_example, package = "timeProtState")

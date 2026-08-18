@@ -11,7 +11,9 @@ tps_calibrate_pathways(
   mode = c("abundance_stratified", "unstratified"),
   n_bins = 4L,
   seed = 1L,
-  correction = c("per_contrast", "global")
+  correction = c("per_contrast", "global"),
+  intergene = c("vif", "none"),
+  vif_cap = Inf
 )
 }
 \arguments{
@@ -37,10 +39,26 @@ global state is not perturbed.}
 \item{correction}{character; \code{"per_contrast"} (default) applies BH
 within each contrast, \code{"global"} applies BH across all
 pathway x contrast tests (more conservative for multi-timepoint designs).}
+
+\item{intergene}{character; \code{"vif"} (default) applies the inter-gene
+variance inflation, or \code{"none"} for the unadjusted permutation.}
+
+\item{vif_cap}{numeric; upper bound on the VIF to prevent over-correction
+when pathway size is large and estimated rho is high (default \code{Inf},
+no cap). The compound-symmetric VIF \code{1 + (k-1)*rho} grows linearly
+with pathway size. Real proteomics data show highly variable VIF:
+PXD065583 (human ASO) median VIF=1.66, only 12% of pathways exceed 3;
+PXD006262 (yeast heat-shock) median VIF=5.43, 82% exceed 3. A cap of 3-4
+is reasonable for datasets with moderate pathway correlation (rho < 0.1)
+but will over-correct high-correlation data. Users should inspect the
+\code{$vif} field and choose a cap based on their data's rho distribution.
+Simulation (rho=0.5, k=10): cap=3 gives type-I 0.055 + power 0.590;
+uncapped gives type-I 0.000 + power 0.060.}
 }
 \value{
 a list of class \code{tps_pathway_calibrated} extending the input
-  with \code{p_net}, \code{p_rem}, \code{q_net}, \code{q_rem}, null summaries.
+  with \code{p_net}, \code{p_rem}, \code{q_net}, \code{q_rem}, null summaries,
+  and (when \code{intergene = "vif"}) \code{intergene_cor} and \code{vif}.
 }
 \description{
 Applies a size-matched permutation null to a \code{tps_pathway_scores}
@@ -54,6 +72,17 @@ The default mode is \code{"abundance_stratified"}: proteins are binned into
 bin. One shared permutation index retains overlap among pathway definitions;
 stratification reduces differences in abundance distributions but does not
 preserve within-pathway protein covariance.
+
+\code{intergene = "vif"} (the default) estimates each pathway's mean
+pairwise residual correlation across samples (after the group-means
+fit) and scales the observed NET / REM excess by \code{1/sqrt(VIF)}
+before the permutation comparison, with
+\code{VIF = 1 + (k - 1) * rho}. Residuals come from
+\code{\link{tps_fit}} via \code{\link{tps_pathway_scores}}. This is
+the competitive correction for member correlation that label
+permutation otherwise destroys (ADR 0010). \code{intergene = "none"}
+is the historical unadjusted permutation (ADR 0005). VIF is 1 when
+residuals are unavailable (for example a bare statistic matrix).
 }
 \examples{
 data(tps_example, package = "timeProtState")

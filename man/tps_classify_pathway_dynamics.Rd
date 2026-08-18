@@ -27,8 +27,9 @@ per-pathway-per-condition dynamic state labels describing HOW the pathway
 remodels over time: \code{early_directional}, \code{gradual_remodeling},
 \code{delayed_opposition}, \code{transient_burst},
 \code{directional_delayed}, \code{sustained_remodeling}, or
-\code{no_dynamic_signal}. Also detects \code{divergent} pathways where
-conditions separate in NET direction.
+\code{no_dynamic_signal}. Cross-condition NET opposition is reported as
+the boolean column \code{is_divergent}, not as a \code{dynamic_state}
+label.
 }
 \details{
 This is the time-course-aware upgrade of \code{\link{tps_classify_pathways}}

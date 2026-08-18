@@ -7,7 +7,8 @@
 tps_metadata_schema()
 }
 \value{
-a character vector of required column names.
+a list of class \code{tps_metadata_schema} with
+  \code{required} and \code{optional} character vectors.
 }
 \description{
 Lists the column names that must be present in the sample metadata passed

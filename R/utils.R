@@ -28,8 +28,8 @@ tps_warn <- function(message, ...) {
 }
 
 ## ---- required metadata columns --------------------------------------------
-## Frozen by STATISTICAL_CONTRACT.md section 4.1. These five columns are
-## mandatory; the design layer refuses to proceed without them.
+## Frozen by the data contract. These four columns are mandatory; the
+## design layer refuses to proceed without them.
 tps_required_metadata_cols <- function() {
   c("sample_id", "condition", "time", "is_baseline")
 }
@@ -57,10 +57,8 @@ tps_known_optional_cols <- function() {
 ## Not cryptographically strong; sufficient for detecting accidental edits.
 tps_checksum <- function(x, algo = "xxhash") {
   if (!is.matrix(x)) x <- as.matrix(x)
-  raw <- serialize(x, connection = NULL, ascii = FALSE)
-  ## Use native R digest via base::sprintf hex of the object pointer is not
-  ## stable; instead hash a stable representation: dims + first/last/step.
-  ## For a robust lightweight checksum, sample evenly across the data.
+  ## Hash a stable representation: sample evenly across the data and combine
+  ## sum-of-squares + count + dims into a hex-ish string.
   d <- dim(x)
   n <- length(x)
   if (n == 0L) return(list(checksum = "empty", n = 0L, dims = d))

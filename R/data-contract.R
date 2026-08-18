@@ -10,7 +10,8 @@
 #' to \code{\link{tps_import}}. These are frozen by the data contract:
 #' \code{sample_id}, \code{condition}, \code{time}, \code{is_baseline}.
 #'
-#' @return a character vector of required column names.
+#' @return a list of class \code{tps_metadata_schema} with
+#'   \code{required} and \code{optional} character vectors.
 #'
 #' @examples
 #' tps_metadata_schema()

@@ -4,7 +4,16 @@
 \alias{tps_fit}
 \title{Fit a limma model to a time-course proteomics experiment}
 \usage{
-tps_fit(se, design, contrasts, assay_name = NULL, trend = TRUE, robust = TRUE)
+tps_fit(
+  se,
+  design,
+  contrasts,
+  assay_name = NULL,
+  trend = TRUE,
+  robust = TRUE,
+  block = NULL,
+  correlation = NULL
+)
 }
 \arguments{
 \item{se}{a \code{SummarizedExperiment} from \code{\link{tps_import}}.}
@@ -19,12 +28,22 @@ recorded at import.}
 \item{trend}{logical; passed to \code{\link[limma]{eBayes}}. Default TRUE.}
 
 \item{robust}{logical; passed to \code{eBayes}. Default TRUE.}
+
+\item{block}{optional repeated-measures block. Supply one column name from
+\code{colData(se)} (for example, \code{"subject_id"}) or a vector aligned
+to assay columns. When supplied without \code{correlation}, the consensus
+correlation is estimated with \code{\link[limma]{duplicateCorrelation}}.}
+
+\item{correlation}{optional within-block correlation supplied to
+\code{\link[limma]{lmFit}}. Requires \code{block}; when \code{NULL}, the
+correlation is estimated from the data.}
 }
 \value{
 a list of class \code{tps_fit} with:
   \item{statistics}{per-contrast (and per-family) result table.}
   \item{fit}{the limma MArrayLM object.}
-  \item{thresholds}{the trend/robust settings used.}
+  \item{thresholds}{the trend/robust settings plus optional
+    \code{block}, \code{correlation}, and \code{correlation_source}.}
   \item{provenance}{provenance entry.}
 }
 \description{
@@ -36,8 +55,7 @@ F-tests for the average-time, heterogeneity, and within-condition families.
 }
 \details{
 The default \code{trend = TRUE, robust = TRUE} is applied uniformly across
-all families (resolving the legacy three-way eBayes inconsistency -- see
-STATISTICAL_CONTRACT.md section 3).
+all families so every contrast family uses the same eBayes settings.
 }
 \examples{
 data(tps_example, package = "timeProtState")

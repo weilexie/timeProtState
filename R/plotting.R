@@ -27,6 +27,14 @@
     directional_with_internal_opposition = "#CC79A7")
 }
 
+## Pathway-state-only palette (excludes volcano-only labels: up/down/ns/sig)
+.tps_pathway_colors <- function() {
+  cols <- .tps_colors()
+  pw_names <- c("directional_up", "directional_down", "mixed_remodeling",
+                "no_strong_state", "directional_with_internal_opposition")
+  cols[pw_names[pw_names %in% names(cols)]]
+}
+
 ## ===========================================================================
 ## tps_plot_volcano
 ## ===========================================================================
@@ -69,14 +77,25 @@ tps_plot_volcano <- function(fit, contrast, significance = "adj.P.Val",
       !is.finite(lfc_threshold) || lfc_threshold < 0) {
     tps_abort("lfc_threshold must be one non-negative finite value.")
   }
+  if (is.null(contrast) || length(contrast) != 1L ||
+      is.na(contrast) || !nzchar(contrast)) {
+    tps_abort("contrast must be a single non-empty contrast name.")
+  }
   d <- tps_results(fit, contrast = contrast)
   d <- d[d$test == "t", , drop = FALSE]
   if (nrow(d) == 0L) tps_abort("contrast '%s' has no t-test rows.", contrast)
   ## significance column may be P.Value or adj.P.Val; pull by name
   sig_vals <- d[[significance]]
-  d$direction <- ifelse(!is.na(sig_vals) & sig_vals < alpha &
+  ## NA-safe direction assignment. A row with NA logFC but a valid
+  ## significant p-value must short-circuit to "ns"; an inner-only
+  ## `is.na(d$logFC)` guard is NOT enough because `abs(NA) >= lfc_threshold`
+  ## evaluates to NA, which makes the OUTER ifelse return NA. The
+  ## `!is.na(d$logFC)` term in the outer condition is load-bearing.
+  d$direction <- ifelse(!is.na(sig_vals) & !is.na(d$logFC) &
+                          sig_vals < alpha &
                           abs(d$logFC) >= lfc_threshold,
-                        ifelse(d$logFC > 0, "up", "down"), "ns")
+                        ifelse(d$logFC > 0, "up",
+                               ifelse(d$logFC < 0, "down", "ns")), "ns")
   d$neglog10p <- -log10(pmax(sig_vals, 1e-300))
   cols <- .tps_colors()
   p <- ggplot2::ggplot(d, ggplot2::aes(.data$logFC, .data$neglog10p,
@@ -145,6 +164,9 @@ tps_plot_trajectories <- function(clusters, n_features = 100L) {
   }
   if (inherits(clusters, "tps_trajectory")) {
     m <- clusters$unique_cell
+    if (nrow(m) == 0L) {
+      tps_abort("trajectory matrix has no features to plot.")
+    }
     if (nrow(m) > n_features) {
       ## deterministic subsample to avoid RNG perturbation; use first n_features
       m <- m[seq_len(n_features), , drop = FALSE]
@@ -176,6 +198,12 @@ reshape2_or_gather <- function(df, key, value, id) {
     df[[id]] <- seq_len(nrow(df))
   }
   cols <- setdiff(names(df), id)
+  if (length(cols) == 0L || nrow(df) == 0L) {
+    long <- data.frame(id = df[[id]][0L], key = character(0),
+                       val = numeric(0), stringsAsFactors = FALSE)
+    names(long) <- c(id, key, value)
+    return(long)
+  }
   long <- do.call(rbind, lapply(cols, function(cc) {
     data.frame(id = df[[id]], key = cc, val = df[[cc]],
                stringsAsFactors = FALSE)
@@ -212,16 +240,23 @@ tps_plot_pathway_states <- function(pathway_states) {
   if (!requireNamespace("ggplot2", quietly = TRUE)) {
     tps_abort("ggplot2 is required for plotting.")
   }
-  if (!is.data.frame(pathway_states) || !"state" %in% names(pathway_states)) {
-    tps_abort("pathway_states must be a data.frame from tps_classify_pathways.")
+  if (!is.data.frame(pathway_states) ||
+      !all(c("state", "contrast") %in% names(pathway_states))) {
+    tps_abort("pathway_states must be a data.frame from tps_classify_pathways with 'state' and 'contrast' columns.")
   }
-  tab <- as.data.frame(table(pathway_states$contrast, pathway_states$state))
-  names(tab) <- c("contrast","state","n")
-  cols <- .tps_colors()
+  tab <- as.data.frame(table(pathway_states$contrast, pathway_states$state,
+                              useNA = "ifany"))
+  if (ncol(tab) < 3L) {
+    tab <- data.frame(contrast = character(0), state = character(0),
+                      n = integer(0))
+  } else {
+    names(tab) <- c("contrast","state","n")
+  }
+  cols <- .tps_pathway_colors()
   p <- ggplot2::ggplot(tab, ggplot2::aes(.data$contrast, .data$n,
                                           fill = .data$state)) +
     ggplot2::geom_col(position = "stack") +
-    ggplot2::scale_fill_manual(values = cols, name = "state") +
+    {if (nrow(tab) > 0L) ggplot2::scale_fill_manual(values = cols, name = "state")} +
     ggplot2::labs(title = "Pathway state distribution",
                   x = "contrast", y = "number of pathways") +
     ggplot2::theme_bw() +
@@ -257,8 +292,12 @@ tps_plot_state_distribution <- function(states) {
   if (!inherits(states, "tps_states")) {
     tps_abort("states must be a tps_states object.")
   }
-  tab <- as.data.frame(table(states$state_table$state))
-  names(tab) <- c("state","n")
+  tab <- as.data.frame(table(states$state_table$state, useNA = "ifany"))
+  if (ncol(tab) < 2L) {
+    tab <- data.frame(state = character(0), n = integer(0))
+  } else {
+    names(tab) <- c("state","n")
+  }
   tab <- tab[order(-tab$n), ]
   p <- ggplot2::ggplot(tab, ggplot2::aes(stats::reorder(.data$state, -.data$n),
                                            .data$n)) +
@@ -345,6 +384,7 @@ tps_plot_pathway_trajectory <- function(calibrated, term,
 ## public wrapper for the contrast-time parser (used by plotting)
 .parse_contrast_time_pub <- function(contrast_names) {
   base <- sub("_vs_baseline$", "", contrast_names)
+  base <- sub("^endpoint_", "", base)
   cond <- sub("_t[^_]+$", "", base)
   time_str <- sub("^.*_t", "", base)
   time <- suppressWarnings(as.numeric(time_str))

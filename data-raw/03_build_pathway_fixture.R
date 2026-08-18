@@ -1,5 +1,9 @@
 ## data-raw/build_pathway_fixture.R
 ##
+## HISTORICAL FIXTURE REBUILDER. Do not re-run against unpublished local
+## dormancy data. The committed tests/testthat/fixtures/golden_pathway.rds
+## is frozen; package tests load that RDS and do not need TPS_DORMANCY_PROJECT.
+##
 ## Builds a small golden-master fixture for the pathway module, from the real
 ## M. smegmatis dormancy data. Freezes:
 ##   - the 3-contrast moderated-t statistic matrix (subset of 50 proteins)
@@ -110,6 +114,28 @@ for (b in seq_len(n_perm)) {
 }
 p_net_oracle <- (net_null_ge + 1) / (n_perm + 1)
 
+## ---- oracle p_rem (unstratified, centered second-pass, seed=1, n_perm=500) ----
+## Mirrors the Round 2 REM centering fix: both observed and permuted REM
+## excess are centered on rem_null_mean and floored at 0.
+rem_null_sum <- matrix(0.0, nrow(M), ncol(T_MAT))
+set.seed(1L)
+for (b in seq_len(n_perm)) {
+  idx <- sample.int(n_prot)
+  rem_b <- as.matrix(Mt %*% abs_T[idx, , drop = FALSE]) / sizes
+  rem_null_sum <- rem_null_sum + rem_b
+}
+rem_null_mean <- rem_null_sum / n_perm
+rem_null_ge <- matrix(0.0, nrow(M), ncol(T_MAT))
+observed_rem_excess <- pmax(REM - rem_null_mean, 0)
+set.seed(1L)
+for (b in seq_len(n_perm)) {
+  idx <- sample.int(n_prot)
+  rem_b <- as.matrix(Mt %*% abs_T[idx, , drop = FALSE]) / sizes
+  rem_null_ge <- rem_null_ge +
+    (pmax(rem_b - rem_null_mean, 0) >= observed_rem_excess - EPS)
+}
+p_rem_oracle <- (rem_null_ge + 1) / (n_perm + 1)
+
 golden_pathway <- list(
   statistic_matrix = T_MAT,
   abundance = AVE,
@@ -120,6 +146,7 @@ golden_pathway <- list(
   pathway_terms = rownames(M),
   pathway_sizes = sizes,
   p_net_unstratified = p_net_oracle,
+  p_rem_unstratified = p_rem_oracle,
   n_perm = n_perm, seed = 1L,
   n_proteins = 50L
 )

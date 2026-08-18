@@ -1,23 +1,88 @@
 # timeProtState 0.99.0
 
-## Initial Bioconductor submission candidate
+## Implemented API
 
 - Data contract: `tps_import()`, `tps_validate()`, `tps_metadata_schema()`,
   `tps_provenance()` with shared-baseline detection and ID-mapping audit.
 - Design: `tps_make_design()` saturated group-means model with rank audit.
 - Contrasts: `tps_make_contrasts()` six estimable families (vs-baseline,
   within-condition, average-time, heterogeneity, within-omnibus, endpoint).
-- Fit: `tps_fit()` unified limma (trend=TRUE, robust=TRUE) with
-  `tps_results()` and `tps_statistic_matrix()` accessors.
+- Fit: `tps_fit()` unified limma (`trend=TRUE`, `robust=TRUE`) with optional
+  repeated-measures `block` / `correlation` (`limma::duplicateCorrelation`
+  when `block` is supplied and `correlation` is left `NULL`). Accessors:
+  `tps_results()`, `tps_statistic_matrix()`.
 - States: `tps_classify_states()` three evidence axes + rule manifest;
-  `tps_decision_rule()` with legacy profile support.
+  `tps_decision_rule()` and `tps_state_table()`. The historical raw-P +
+  `|logFC| >= 0.74` rule is reproduced by explicit arguments, not a named
+  profile object.
 - Trajectory: `tps_trajectory_matrix()` unique-cell / display / delta views
-  (baseline once — fixes legacy inflation).
+  (baseline modeled once).
 - Clustering: `tps_cluster_trajectories()` Mfuzz/kmeans adapter with QC;
   `tps_evaluate_k()`.
-- Pathway: `tps_pathway_scores()` NET/REM/COH; `tps_calibrate_pathways()`
-  abundance-stratified permutation; `tps_classify_pathways()`.
+- Pathway snapshots: `tps_pathway_scores()` NET/REM/COH;
+  `tps_calibrate_pathways()` abundance-stratified permutation with a
+  default inter-gene VIF adjustment (`intergene = "vif"`) so competitive
+  NET/REM p-values account for member correlation (ADR 0010;
+  `intergene = "none"` is the historical permutation);
+  `tps_classify_pathways()`.
+- Pathway dynamics: `tps_classify_pathway_dynamics()`,
+  `tps_calibrate_dynamics()`, `tps_divergence_score()`,
+  `tps_link_states_pathways()`, `tps_plot_pathway_trajectory()`.
 - Visualization: `tps_plot_volcano()`, `tps_plot_trajectories()`,
   `tps_plot_state_distribution()`, `tps_plot_pathway_states()`.
-- Simulation: `tps_simulate_timecourse()` for benchmarks.
+- Simulation: `tps_simulate_timecourse()`,
+  `tps_simulate_correlated_pathways()` (within-pathway factor-model
+  correlation), `tps_inject_pathway_effect()`.
 - Export: `tps_export()` structured directory output with manifest.
+
+## Changes (2026-08-17, Rounds 2-5 deep audit)
+
+### Bug fixes
+
+- **REM p-value centering** (`tps_calibrate_pathways`): REM now uses the same
+  centered second-pass permutation comparison as NET (was uncentered first-pass).
+  Both `pmax(..., 0)` clamps applied symmetrically for the one-sided upper-tail test.
+- **State classification** (`tps_classify_states`): new labels `endpoint_up`,
+  `endpoint_down`, `temporal_only`, `heterogeneity_only` replace the ambiguous
+  `endpoint_only`. Proteins with temporal F but no endpoint direction are no
+  longer mislabeled as `stable_or_unresolved`.
+- **Rank-deficiency check** (`tps_make_contrasts`): now aborts if the design
+  matrix is rank-deficient (e.g., batch confounding). Guarded with `!is.null()`
+  for backward compatibility with designs lacking `rank_audit`.
+- **Mixed signal parity** (`tps_simulate_correlated_pathways`): rejects odd
+  `pathway_size` when `pathway_signal = "mixed"` (requires balanced +/− split).
+- **All-NA sample detection** (`tps_validate`): now flags all-NA sample columns
+  as an ERROR (previously only checked row-wise all-NA proteins).
+- **Negative time warning** (`tps_validate`): warns when time values are negative.
+- **`fold_msg` formatting** (`tps_validate`): fixes mangled error messages when
+  all arguments are character (the `is.character()` heuristic is replaced with
+  first-arg-as-template).
+- **Volcano plot logFC=0** (`tps_plot_volcano`): zero-logFC significant features
+  now labeled `ns` instead of `down`.
+- **Pathway trajectory parser** (`tps_plot_pathway_trajectory`): strips
+  `endpoint_` prefix from contrast names before parsing condition/time.
+- **Kmeans distinct-row check** (`tps_cluster_trajectories`): aborts with a
+  clear message when distinct rows < k (was an opaque `stats::kmeans` crash).
+- **Row standardization NA handling** (`tps_cluster_trajectories`): rows with
+  any NA are now excluded from clustering (was silently imputed to 0, violating
+  the package's no-imputation contract).
+- **`table()` NA handling** (plotting): `useNA = "ifany"` added to prevent
+  silent NA drops in state distribution plots.
+- **Provenance preservation** (`tps_calibrate_dynamics`): classify step
+  provenance is now preserved as a list entry instead of being overwritten.
+- **Dead code** (`tps_checksum`): removed unused `serialize()` call.
+
+### New features
+
+- **`vif_cap` parameter** (`tps_calibrate_pathways`): upper bound on VIF to
+  prevent over-correction in large pathways with high estimated rho. Default
+  `Inf` (no cap); empirical analysis shows cap=3 controls type-I to ~0.055
+  while retaining ~59% power at rho=0.5, but the optimal cap is data-dependent.
+
+### Test improvements
+
+- Block fit end-to-end integration test (fit → pathway_scores → calibrate → VIF).
+- `p_rem` golden-master determinism test (locks down Round 2 REM centering fix).
+- Golden-master tests for `intergene = "none"` backward compatibility.
+- VIF edge-case tests (pathway size 3, bare matrix, REM type-I, vif_cap bounds).
+- Trajectory recovery benchmark (50 seeds, 4 effect types, 98-100% recovery).

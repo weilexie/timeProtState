@@ -99,6 +99,13 @@ tps_make_contrasts <- function(design, endpoint = NULL,
       "approach or fix the input."
     ))
   }
+  if (!is.null(design$rank_audit) && !isTRUE(design$rank_audit$full_rank)) {
+    tps_abort(paste0(
+      "design matrix is rank-deficient (null space dimension = ",
+      design$rank_audit$null_space_dim,
+      "); resolve confounded cells or batch covariates before fitting."
+    ))
+  }
   conditions <- sort(unique(cells$condition[!cells$is_baseline]))
   if (length(conditions) < 1L) {
     tps_abort("No non-baseline conditions found; cannot build contrasts.")

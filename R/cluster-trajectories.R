@@ -12,19 +12,23 @@
 ## "optimal K".
 
 ## ---- standardization helper (manual row-z, matching legacy Mfuzz input) ----
+## Rows with any NA are marked as flat (excluded from clustering) rather than
+## silently imputed to 0. This respects the package's "no imputation" data
+## contract: partially-observed proteins should not be clustered alongside
+## fully-observed ones with fabricated values.
 .row_standardize <- function(m) {
   mu <- rowMeans(m, na.rm = TRUE)
   sds <- apply(m, 1L, function(r) {
     s <- stats::sd(r, na.rm = TRUE)
     if (!is.finite(s) || s == 0) NA_real_ else s
   })
-  flat <- is.na(sds)
+  flat <- is.na(sds) | rowAnyNA(m)
   z <- (m - mu) / ifelse(is.na(sds), 1, sds)
   z[flat, ] <- 0
-  ## replace any remaining NA/NaN/Inf with 0 so downstream kmeans/mfuzz are safe
-  z[!is.finite(z)] <- 0
   z
 }
+
+rowAnyNA <- function(m) apply(is.na(m), 1L, any)
 
 ## ---- tps_cluster_trajectories ----------------------------------------------
 #' Cluster protein trajectories
@@ -109,6 +113,9 @@ tps_cluster_trajectories <- function(trajectory, method = c("mfuzz","kmeans"),
   mat_fit <- mat[keep, , drop = FALSE]
   if (nrow(mat_fit) < k) tps_abort("Too few non-flat features (%d) for k=%d.",
                                     nrow(mat_fit), k)
+  n_distinct <- nrow(unique(mat_fit))
+  if (n_distinct < k) tps_abort("Too few distinct trajectories (%d) for k=%d; reduce k or filter features.",
+                                n_distinct, k)
 
   withr::with_seed(seed, {
     if (method == "mfuzz") {
@@ -127,7 +134,15 @@ tps_cluster_trajectories <- function(trajectory, method = c("mfuzz","kmeans"),
       tps_abort("m must be 'estimate' or one finite value greater than 1.")
     }
     m_val <- if (is.character(m)) {
-      as.numeric(Mfuzz::mestimate(eset))
+      m_err <- NULL
+      m_est <- tryCatch(
+        as.numeric(Mfuzz::mestimate(eset)),
+        error = function(e) { m_err <<- conditionMessage(e); NA_real_ })
+      if (is.na(m_est)) {
+        tps_abort("Mfuzz::mestimate failed (%s); set m explicitly or use method='kmeans'.",
+                  if (!is.null(m_err)) m_err else "unknown error")
+      }
+      m_est
     } else {
       as.numeric(m)
     }
@@ -137,8 +152,16 @@ tps_cluster_trajectories <- function(trajectory, method = c("mfuzz","kmeans"),
     ## Mfuzz::mfuzz is a thin wrapper around e1071::cmeans but relies on
     ## e1071 being attached. Call the underlying routine explicitly to avoid
     ## changing the caller's search path.
-    cl <- e1071::cmeans(Biobase::exprs(eset), centers = k,
-                        method = "cmeans", m = m_val)
+    cl <- tryCatch(
+      e1071::cmeans(Biobase::exprs(eset), centers = k,
+                    method = "cmeans", m = m_val),
+      error = function(e) tps_abort("e1071::cmeans failed: %s; try method='kmeans' or reduce k.",
+                                    conditionMessage(e)))
+    if (is.null(cl) || is.null(cl$cluster) || is.null(cl$membership) ||
+        is.null(cl$centers)) {
+      tps_abort("e1071::cmeans returned an incomplete object; try method='kmeans' or reduce k.")
+    }
+
     membership <- cl$membership
     rownames(membership) <- rownames(mat_fit)
     cluster <- cl$cluster
@@ -266,17 +289,20 @@ tps_evaluate_k <- function(trajectory, k_range = 2:10, method = "kmeans",
     assignment <- cl_obj$assignment[!is.na(cl_obj$assignment)]
     row <- list(k = k, method = method,
                 n_clustered = length(assignment),
-                min_cluster_size = min(table(assignment)))
+                min_cluster_size = if (length(assignment)) min(table(assignment)) else NA_integer_)
     if ("within_dispersion" %in% metrics) {
       row$mean_within_dispersion <- mean(cl_obj$qc$within_dispersion)
     }
-    if ("silhouette" %in% metrics && length(unique(assignment)) > 1L) {
+    if ("silhouette" %in% metrics && length(unique(assignment)) > 1L &&
+        anyDuplicated(assignment)) {
       if (!requireNamespace("cluster", quietly = TRUE)) {
         tps_abort("metric 'silhouette' requires the 'cluster' package (in Suggests).")
       }
       d <- stats::dist(mat[names(assignment), , drop = FALSE])
       sil <- cluster::silhouette(assignment, d)
-      row$mean_silhouette <- mean(sil[, "sil_width"])
+      if (is.matrix(sil) && "sil_width" %in% colnames(sil)) {
+        row$mean_silhouette <- mean(sil[, "sil_width"])
+      }
     }
     rows[[length(rows) + 1L]] <- as.data.frame(row, stringsAsFactors = FALSE)
   }
@@ -293,7 +319,7 @@ tps_evaluate_k <- function(trajectory, k_range = 2:10, method = "kmeans",
 print.tps_clusters <- function(x, ...) {
   cat("<timeProtState clusters>\n")
   cat(sprintf("  method: %s   k: %d   seed: %d   features: %d (dropped %d)\n",
-              x$method, x$k, x$seed, x$qc$n_features, x$qc$n_dropped))
+              x$method, x$k, x$seed, x$qc$n_features[1L], x$qc$n_dropped[1L]))
   cat("  cluster sizes:\n")
   for (i in seq_len(nrow(x$qc))) {
     cat(sprintf("    cluster %d: %d\n", x$qc$cluster[i], x$qc$size[i]))

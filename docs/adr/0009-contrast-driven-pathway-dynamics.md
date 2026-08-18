@@ -32,7 +32,10 @@ pathway computation code**.
 
 2. **New functions**:
    - `tps_classify_pathway_dynamics()`: classifies NET/REM/COH trajectories
-     into 7 dynamic patterns (early/gradual/delayed/transient/divergent/...)
+     into 7 dynamic_state patterns (early_directional, gradual_remodeling,
+     delayed_opposition, transient_burst, directional_delayed,
+     sustained_remodeling, no_dynamic_signal). Cross-condition NET opposition
+     is reported as the boolean column `is_divergent`, not as a dynamic_state.
    - `tps_link_states_pathways()`: connects protein states to pathway dynamics
    - `tps_plot_pathway_trajectory()`: visualizes pathway NET/REM/COH over time
 

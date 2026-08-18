@@ -186,6 +186,16 @@ test_that("tps_fit uses trend=TRUE robust=TRUE by default (D1 resolution)", {
   expect_true(f$thresholds$robust)
 })
 
+test_that("tps_fit stores design residuals aligned to the assay", {
+  se <- tps_import(tps_example_abundance, tps_example_metadata)
+  d <- tps_make_design(se)
+  c <- tps_make_contrasts(d, endpoint = 7)
+  f <- tps_fit(se, d, c)
+  expect_true(is.matrix(f$residuals))
+  expect_equal(dim(f$residuals), dim(SummarizedExperiment::assay(se)))
+  expect_equal(rownames(f$residuals), rownames(se))
+})
+
 test_that("tps_fit statistics have all required columns", {
   se <- tps_import(tps_example_abundance, tps_example_metadata)
   d <- tps_make_design(se)
@@ -223,4 +233,40 @@ test_that("tps_fit respects trend/robust override", {
   f <- tps_fit(se, d, c, trend = FALSE, robust = FALSE)
   expect_false(f$thresholds$trend)
   expect_false(f$thresholds$robust)
+})
+
+test_that("tps_fit estimates and records repeated-measures correlation", {
+  meta <- tps_example_metadata
+  meta$subject_id <- meta$replicate
+  se <- tps_import(tps_example_abundance, meta)
+  d <- tps_make_design(se)
+  c <- tps_make_contrasts(d, endpoint = 7)
+  f <- tps_fit(se, d, c, block = "subject_id")
+
+  expect_equal(f$thresholds$block, "subject_id")
+  expect_equal(f$thresholds$correlation_source, "estimated")
+  expect_true(is.finite(f$thresholds$correlation))
+  expect_output(print(f), "correlation")
+})
+
+test_that("tps_fit accepts supplied block correlation", {
+  meta <- tps_example_metadata
+  meta$subject_id <- meta$replicate
+  se <- tps_import(tps_example_abundance, meta)
+  d <- tps_make_design(se)
+  c <- tps_make_contrasts(d, endpoint = 7)
+  f <- tps_fit(se, d, c, block = "subject_id", correlation = 0.2)
+
+  expect_equal(f$thresholds$correlation, 0.2)
+  expect_equal(f$thresholds$correlation_source, "supplied")
+})
+
+test_that("tps_fit validates block and correlation arguments", {
+  se <- tps_import(tps_example_abundance, tps_example_metadata)
+  d <- tps_make_design(se)
+  c <- tps_make_contrasts(d, endpoint = 7)
+
+  expect_error(tps_fit(se, d, c, block = "not_a_column"), "not present")
+  expect_error(tps_fit(se, d, c, correlation = 0.2), "requires")
+  expect_error(tps_fit(se, d, c, block = seq_len(3)), "vector of length")
 })

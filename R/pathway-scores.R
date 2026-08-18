@@ -69,6 +69,12 @@
 #' the deterministic layer; permutation calibration is applied separately via
 #' \code{\link{tps_calibrate_pathways}}.
 #'
+#' The scores are: \code{NET = mean(t)}, \code{REM = mean(|t|)},
+#' \code{COH = |NET| / (REM + eps)}. COH is a magnitude-weighted coherence
+#' measure in [0,1]: it equals 1 when all members share the same direction
+#' and approaches 0 when opposing directions cancel. This is not a simple
+#' count-based fraction of same-sign members; it weights by magnitude.
+#'
 #' Pathways with fewer than \code{min_size} observed members (intersected with
 #' the analysis universe) are dropped.
 #'
@@ -80,7 +86,9 @@
 #' @param type character; statistic to aggregate: \code{"moderated_t"} (default),
 #'   \code{"logFC"}, or \code{"signed_log10p"}.
 #' @param family character; if \code{fit} is a \code{tps_fit}, restrict to this
-#'   contrast family (e.g. \code{"endpoint"}). Ignored if a matrix is supplied.
+#'   contrast family (e.g. \code{"vs_baseline"} or \code{"endpoint"}). If
+#'   \code{NULL}, every single-contrast (t) family is pooled, which can
+#'   double-count the same algebraic contrast. Ignored if a matrix is supplied.
 #' @param id_col character; if feature ids in the fit come from a rowData column
 #'   (e.g. locus tags) rather than row names, name that column. If \code{NULL},
 #'   row names of the statistic matrix are used.
@@ -132,8 +140,12 @@ tps_pathway_scores <- function(fit, term2gene, type = "moderated_t",
 
   ## obtain statistic matrix
   pathway_ids <- NULL
+  residual_mat <- NULL
   if (inherits(fit, "tps_fit")) {
     stat_mat <- tps_statistic_matrix(fit, type = type, family = family)
+    if (!is.null(fit$residuals)) {
+      residual_mat <- fit$residuals
+    }
     ## if id_col given, remap rownames via the annotation carried by the fit
     if (!is.null(id_col)) {
       ann <- fit$annotation
@@ -183,6 +195,14 @@ tps_pathway_scores <- function(fit, term2gene, type = "moderated_t",
   dropped_nonfinite <- feature_ids[!finite_rows]
   stat_mat <- stat_mat[finite_rows, , drop = FALSE]
   pathway_ids <- pathway_ids[finite_rows]
+  if (!is.null(residual_mat)) {
+    rid <- feature_ids[finite_rows]
+    if (!is.matrix(residual_mat) || !all(rid %in% rownames(residual_mat))) {
+      residual_mat <- NULL
+    } else {
+      residual_mat <- residual_mat[rid, , drop = FALSE]
+    }
+  }
   universe <- pathway_ids
   if (length(universe) == 0L) {
     tps_abort("statistic matrix has no features finite across all selected contrasts.")
@@ -235,6 +255,7 @@ tps_pathway_scores <- function(fit, term2gene, type = "moderated_t",
       membership = M,
       pathway_table = pathway_table,
       statistic_matrix = stat_mat,
+      residuals = residual_mat,
       statistic_type = type,
       universe = universe,
       feature_ids = rownames(stat_mat),

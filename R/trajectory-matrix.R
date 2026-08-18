@@ -153,13 +153,22 @@ tps_trajectory_matrix <- function(se, features = NULL,
   }
 
   ## missingness summary per feature
-  n_obs <- rowSums(!is.na(means))
-  miss_summary <- data.frame(
-    feature_id = rownames(means),
-    n_cells_observed = n_obs,
-    n_cells_total = ncol(means),
-    pct_missing = round(100 * (1 - n_obs / ncol(means)), 2),
-    stringsAsFactors = FALSE)
+  if (nrow(means) == 0L) {
+    miss_summary <- data.frame(
+      feature_id = character(0),
+      n_cells_observed = integer(0),
+      n_cells_total = integer(0),
+      pct_missing = numeric(0),
+      stringsAsFactors = FALSE)
+  } else {
+    n_obs <- rowSums(!is.na(means))
+    miss_summary <- data.frame(
+      feature_id = rownames(means),
+      n_cells_observed = n_obs,
+      n_cells_total = ncol(means),
+      pct_missing = round(100 * (1 - n_obs / ncol(means)), 2),
+      stringsAsFactors = FALSE)
+  }
 
   out <- structure(
     list(

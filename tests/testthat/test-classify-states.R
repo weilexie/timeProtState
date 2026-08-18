@@ -113,3 +113,38 @@ test_that("rule manifest includes reversal axis", {
   s <- run_states()
   expect_true("reversal" %in% s$rule_manifest$axis)
 })
+
+test_that("classified states use only documented labels and stay feature-aligned", {
+  s <- run_states()
+  st <- tps_state_table(s)
+  documented <- c(
+    "stable_or_unresolved", "shared_dynamic_up", "shared_dynamic_down",
+    "condition_dependent_dynamic", "endpoint_up", "endpoint_down",
+    "temporal_only", "heterogeneity_only",
+    "cross_condition_opposite", "temporal_reversal"
+  )
+  expect_true(all(st$state %in% documented))
+  expect_equal(nrow(st), nrow(tps_example_abundance))
+  expect_setequal(st$feature_id, rownames(tps_example_abundance))
+})
+
+test_that("documented tps_example pipeline produces a full-rank fit and states", {
+  se <- tps_import(tps_example_abundance, tps_example_metadata,
+                   tps_example_annotation)
+  expect_equal(dim(se), c(200L, 30L))
+  design <- tps_make_design(se)
+  expect_true(isTRUE(design$rank_audit$full_rank))
+  contrasts <- tps_make_contrasts(design, endpoint = 7)
+  expect_true(all(c("vs_baseline", "endpoint") %in% names(contrasts$families)))
+  fit <- tps_fit(se, design, contrasts)
+  expect_gt(nrow(fit$statistics), 0L)
+  expect_true(all(c("logFC", "t", "P.Value", "adj.P.Val") %in% names(fit$statistics)))
+  states <- tps_classify_states(fit)
+  documented <- c(
+    "stable_or_unresolved", "shared_dynamic_up", "shared_dynamic_down",
+    "condition_dependent_dynamic", "endpoint_up", "endpoint_down",
+    "temporal_only", "heterogeneity_only",
+    "cross_condition_opposite", "temporal_reversal"
+  )
+  expect_true(all(tps_state_table(states)$state %in% documented))
+})

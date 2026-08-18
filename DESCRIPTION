@@ -1,8 +1,8 @@
 Package: timeProtState
 Type: Package
-Title: timeProtState: Contrast-Aware Pathway Remodeling Dynamics for Time-Course Proteomics
+Title: Contrast-Aware Pathway Remodeling Dynamics for Time-Course Proteomics
 Version: 0.99.0
-Date: 2026-08-09
+Date: 2026-08-15
 Authors@R: c(
     person(given = "Weile", family = "Xie",
            email = "weile.xie@outlook.com",
@@ -12,8 +12,9 @@ Description: Provides an auditable framework for shared-baseline,
     constructs estimable contrast families from a saturated group-means
     design, decomposes protein-level temporal and condition-dependent
     evidence into transparent axes, and computes permutation-calibrated
-    directional and remodeling pathway states. Includes trajectory
-    clustering, simulation for benchmarks, and structured export.
+    directional and remodeling pathway states. Optional repeated-measures
+    correlation is supported in the fit. Includes trajectory clustering,
+    correlated-pathway simulation for benchmarks, and structured export.
 License: Artistic-2.0 | file LICENSE
 Encoding: UTF-8
 Depends:
@@ -40,7 +41,5 @@ Suggests:
     ggplot2
 VignetteBuilder: knitr
 Config/testthat/edition: 3
-URL: https://github.com/weilexie/timeProtState
-BugReports: https://github.com/weilexie/timeProtState/issues
 biocViews: Proteomics, TimeCourse, DifferentialExpression, Clustering, Software
 RoxygenNote: 7.3.3

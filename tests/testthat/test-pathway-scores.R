@@ -242,9 +242,32 @@ test_that("golden_pathway: unstratified p_net matches oracle exactly (seed=1)", 
   pws <- tps_pathway_scores(stat_m, g$term2gene,
                              type = "user_matrix", min_size = g$min_size)
   pws_c <- tps_calibrate_pathways(pws, n_perm = g$n_perm,
-                                   mode = "unstratified", seed = g$seed)
+                                   mode = "unstratified", seed = g$seed,
+                                   intergene = "none")
   o <- match(g$pathway_terms, rownames(pws_c$p_net))
   expect_equal(pws_c$p_net[o, ], g$p_net_unstratified, tolerance = 0)
+})
+
+test_that("golden_pathway: p_rem is deterministic and in [0,1] (centered REM oracle)", {
+  ## Round 2 changed REM to centered second-pass comparison. This test locks
+  ## down the p_rem determinism (same seed → same p_rem) and range, since the
+  ## golden fixture does not store p_rem (it predates the Round 2 fix).
+  g <- readRDS(testthat::test_path("fixtures", "golden_pathway.rds"))
+  stat_m <- g$statistic_matrix
+  rownames(stat_m) <- g$annotation$locus_tag[match(rownames(stat_m),
+                                                     g$annotation$feature_id)]
+  pws <- tps_pathway_scores(stat_m, g$term2gene,
+                             type = "user_matrix", min_size = g$min_size)
+  pws_c <- tps_calibrate_pathways(pws, n_perm = g$n_perm,
+                                   mode = "unstratified", seed = g$seed,
+                                   intergene = "none")
+  pr <- pws_c$p_rem
+  expect_true(all(pr >= 0 & pr <= 1))
+  ## determinism: re-run with same seed, must match exactly
+  pws_c2 <- tps_calibrate_pathways(pws, n_perm = g$n_perm,
+                                    mode = "unstratified", seed = g$seed,
+                                    intergene = "none")
+  expect_equal(pr, pws_c2$p_rem, tolerance = 0)
 })
 
 ## ===========================================================================
