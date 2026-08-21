@@ -629,18 +629,18 @@ tps_divergence_score <- function(calibrated, dyn = NULL, alpha = 0.05) {
 #'
 #' @examples
 #' sim <- tps_simulate_timecourse(
-#'   n_features = 24, conditions = c("A", "B"), times = c(1, 3),
+#'   n_features = 12, conditions = c("A", "B"), times = c(1, 3),
 #'   n_replicates = 2, effect_mix = c(null = 1), seed = 1)
 #' se <- tps_import(sim$abundance, sim$col_data)
 #' design <- tps_make_design(se)
 #' contrasts <- tps_make_contrasts(design, endpoint = 3)
 #' fit <- tps_fit(se, design, contrasts)
-#' t2g <- data.frame(term = "pw1", gene = rownames(sim$abundance)[1:8],
+#' t2g <- data.frame(term = "pw1", gene = rownames(sim$abundance)[1:4],
 #'                   stringsAsFactors = FALSE)
-#' pws <- tps_pathway_scores(fit, t2g, family = "vs_baseline", min_size = 5)
+#' pws <- tps_pathway_scores(fit, t2g, family = "vs_baseline", min_size = 3)
 #' pws_c <- tps_calibrate_pathways(pws, mode = "unstratified",
-#'                                 n_perm = 5, seed = 1)
-#' dyn_cal <- tps_calibrate_dynamics(pws_c, n_perm = 5, seed = 1)
+#'                                 n_perm = 2, seed = 1)
+#' dyn_cal <- tps_calibrate_dynamics(pws_c, n_perm = 2, seed = 1)
 #' nrow(dyn_cal)
 #' @export
 tps_calibrate_dynamics <- function(calibrated, n_perm = 500L, alpha = 0.05,
