@@ -56,6 +56,19 @@ test_that("dynamics states are from the allowed vocabulary", {
   expect_true(all(dyn$dynamic_state %in% allowed))
 })
 
+test_that("shipped example represents both dynamic signal and null pathways", {
+  d <- run_dynamics()
+  dyn <- tps_classify_pathway_dynamics(d$pws_c)
+  trajectories <- unique(dyn[, c("term", "condition", "dynamic_state")])
+
+  expect_true(any(trajectories$dynamic_state != "no_dynamic_signal"))
+  expect_gt(length(unique(trajectories$dynamic_state)), 1L)
+  expect_true(all(
+    trajectories$dynamic_state[trajectories$term == "toy_null"] ==
+      "no_dynamic_signal"
+  ))
+})
+
 test_that("dynamics detects divergent pathways column", {
   d <- run_dynamics()
   dyn <- tps_classify_pathway_dynamics(d$pws_c)
@@ -444,10 +457,15 @@ test_that("coh_cut sensitivity returns aligned valid classifications", {
         "transient_burst","directional_delayed","sustained_remodeling",
         "no_dynamic_signal")))
   }
-  ## No-signal trajectories should remain the majority in this synthetic data.
+  ## The explicit null pathway should remain null, while the example retains
+  ## at least one dynamic trajectory, across the sensitivity range.
   for (i in 1:3) {
-    expect_gte(mean(states_by_cut[[i]]$dynamic_state == "no_dynamic_signal"),
-               0.5)
+    null_states <- states_by_cut[[i]]$dynamic_state[
+      states_by_cut[[i]]$term == "toy_null"
+    ]
+    expect_length(null_states, 3L)
+    expect_true(all(null_states == "no_dynamic_signal"))
+    expect_true(any(states_by_cut[[i]]$dynamic_state != "no_dynamic_signal"))
   }
 })
 

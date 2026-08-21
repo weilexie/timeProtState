@@ -35,7 +35,9 @@ invisibly, a data.frame of written files.
 \description{
 Writes the standard result tables from a completed analysis (fit, states,
 trajectory, clusters, pathway scores/states) to a structured directory,
-along with a manifest recording provenance and software versions.
+along with a CSV manifest recording filenames, paths, timestamps, and the
+package version. Full analysis provenance remains in the exported RDS
+objects.
 }
 \examples{
 data(tps_example, package = "timeProtState")

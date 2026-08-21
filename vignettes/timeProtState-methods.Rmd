@@ -92,13 +92,19 @@ $$\text{NET}_{g,j} = \frac{\sum_i M_{g,i} s_{i,j}}{\sum_i M_{g,i}}, \quad
 The default null is **abundance-stratified**: proteins are binned into equal-
 frequency abundance quantiles and permuted within each bin. This reduces
 abundance imbalance while retaining pathway overlap through a shared
-permutation index. Let $\mu^0$ be the permutation-null mean. The centred,
-two-sided NET p-value uses $+1$ smoothing:
+permutation index. Let $\mu^0$ be the permutation-null mean and $V_g$ the
+pathway VIF (1 when `intergene = "none"`). The observed NET departure is
+$d^{NET}_{obs}=|NET_{obs}-\mu^0_{NET}|/\sqrt{V_g}$, and the null departure is
+$d^{NET}_{null}=|NET_{null}-\mu^0_{NET}|$. The centred, two-sided NET p-value
+uses $+1$ smoothing:
 
-$$p_{NET} = \frac{\#\{|NET_{null}-\mu^0| \geq
-|NET_{obs}-\mu^0|\} + 1}{N_{perm} + 1}$$
+$$p_{NET} = \frac{\#\{d^{NET}_{null} \geq d^{NET}_{obs}\} + 1}
+{N_{perm} + 1}$$
 
-REM uses an upper-tail comparison, $REM_{null} \geq REM_{obs}$.
+REM uses the corresponding centred upper-tail excess:
+$d^{REM}_{obs}=\max(REM_{obs}-\mu^0_{REM},0)/\sqrt{V_g}$ and
+$d^{REM}_{null}=\max(REM_{null}-\mu^0_{REM},0)$, with
+$p_{REM}=(\#\{d^{REM}_{null}\geq d^{REM}_{obs}\}+1)/(N_{perm}+1)$.
 
 **Calibration caveat**: abundance stratification reduces anti-conservative
 bias from abundance imbalance. Label permutation still breaks
@@ -127,7 +133,7 @@ interpretable dynamic patterns:
 
 - **early_directional**: first timepoint NET-significant with high COH
   and a persistent, directionally consistent NET signal
-- **gradual_remodeling**: terminal REM is significant and larger than
+- **gradual_remodeling**: terminal REM is significant and more than 1.2-fold
   the first timepoint REM (no COH-rise requirement)
 - **delayed_opposition**: the final supported NET direction reverses an earlier
   supported direction
@@ -137,8 +143,9 @@ interpretable dynamic patterns:
 - **sustained_remodeling**: at least one timepoint has significant REM
   and no timepoint has significant NET
 
-Cross-condition **divergence** is reported as a separate flag when supported
-NET directions oppose one another at a matched timepoint.
+Cross-condition **divergence** is reported as a separate flag at a matched
+timepoint when two significant NET directions oppose one another, or when a
+significant direction opposes a non-significant NET with magnitude above 0.1.
 
 The full rank-audited contrast family's moderated statistics drive pathway-level
 inference directly, preserving direction and uncertainty at every timepoint.

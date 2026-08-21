@@ -78,7 +78,7 @@ states
 ```
 
 The default decision rule uses Benjamini-Hochberg FDR < 0.05 with no logFC
-gate. A legacy profile reproduces raw-P + effect-size rules:
+gate. A legacy-style rule reproduces raw-P + effect-size behavior:
 
 ```{r legacy-rule}
 legacy_rule <- tps_decision_rule(
@@ -145,6 +145,10 @@ table(dyn$dynamic_state)
 ## Single-pathway trajectory plot (NET over time, by condition)
 ## tps_plot_pathway_trajectory(pws_c, term = rownames(pws_c$scores$NET)[1])
 ```
+
+The shipped toy pathways are aligned to known synthetic effect blocks and
+include a null pathway, so this example exercises both dynamic-signal and
+`no_dynamic_signal` classifications without using biological data.
 
 For a single-timepoint (endpoint-only) analysis, use `family = "endpoint"`
 and `tps_classify_pathways()` instead.

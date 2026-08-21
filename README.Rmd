@@ -60,11 +60,11 @@ a column named `replicate` as a block by default.
 See the vignettes for pathway analysis (`family = "vs_baseline"`),
 visualization, and `tps_simulate_correlated_pathways()`.
 
-## Public evidence path
+## Public validation
 
 Package examples and tests use the synthetic `tps_example` object (200
-features × 30 samples). The default public validation sequence is
-documented in `05_validation/02_timeProtState-paper/README.md`:
+features × 30 samples). The publication benchmarks use only public data and
+known-truth simulation:
 
 - PXD006262 (single-condition longitudinal) —
   `scripts/15_PXD006262_closest_longitudinal.R`
@@ -72,6 +72,11 @@ documented in `05_validation/02_timeProtState-paper/README.md`:
   `scripts/21_PXD065583_ASO_benchmark.R`
 - correlated-pathway simulation —
   `scripts/13_simulation_correlation_benchmark.R`
+
+These benchmark scripts belong to the manuscript reproducibility bundle and
+are not distributed inside this standalone package repository. The accessions
+above remain the stable public-data identifiers; use the released manuscript
+bundle to reproduce the benchmark sequence.
 
 ## Scope
 

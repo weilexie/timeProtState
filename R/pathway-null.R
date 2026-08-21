@@ -96,8 +96,9 @@
 #'
 #' Applies a size-matched permutation null to a \code{tps_pathway_scores}
 #' object and computes empirical p-values for NET (two-sided around its
-#' permutation-null mean) and REM (upper-tail), Benjamini-Hochberg q-values,
-#' and null mean/SD per pathway.
+#' permutation-null mean) and REM (upper-tail on its non-negative excess over
+#' the permutation-null mean), Benjamini-Hochberg q-values, and null mean/SD
+#' per pathway.
 #'
 #' The default mode is \code{"abundance_stratified"}: proteins are binned into
 #' \code{n_bins} equal-frequency abundance quantiles and permuted within each

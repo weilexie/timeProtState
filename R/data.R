@@ -7,7 +7,9 @@
 #' Small synthetic dataset mirroring the structure of a shared-baseline
 #' multi-condition time-course experiment: one shared day-0 baseline group
 #' plus three conditions at times 1/3/7, three replicates per cell
-#' (200 features x 30 samples). Used in package examples and tests.
+#' (200 features x 30 samples). The toy pathway mapping includes deterministic
+#' effect-aligned and null pathways so examples exercise both dynamic signals
+#' and no-signal behavior. Used in package examples and tests.
 #'
 #' @format Four objects loaded by \code{data(tps_example)} (not a single list):
 #'   \describe{

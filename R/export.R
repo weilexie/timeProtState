@@ -11,7 +11,9 @@
 #'
 #' Writes the standard result tables from a completed analysis (fit, states,
 #' trajectory, clusters, pathway scores/states) to a structured directory,
-#' along with a manifest recording provenance and software versions.
+#' along with a CSV manifest recording filenames, paths, timestamps, and the
+#' package version. Full analysis provenance remains in the exported RDS
+#' objects.
 #'
 #' @param output_dir character; target directory (created if missing).
 #' @param fit optional \code{tps_fit}.

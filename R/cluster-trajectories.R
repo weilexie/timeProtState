@@ -1,5 +1,5 @@
 ## ============================================================================
-## Cluster trajectories: Mfuzz adapter (soft) + kmeans fallback (hard)
+## Cluster trajectories: Mfuzz adapter (soft) + kmeans alternative (hard)
 ## ============================================================================
 ##
 ## Implements STATISTICAL_CONTRACT.md section 7.2-7.3 and DECISIONS D6.
@@ -8,7 +8,7 @@
 ## trajectory matrix (baseline once), not the legacy 3x-copied display matrix.
 ##
 ## Mfuzz is in Suggests (optional); kmeans (base stats) is the always-available
-## fallback. Either way: seed-controlled, membership QC reported, no claim of
+## alternative. Either way: seed-controlled, membership QC reported, no claim of
 ## "optimal K".
 
 ## ---- standardization helper (manual row-z, matching legacy Mfuzz input) ----
@@ -36,8 +36,10 @@ rowAnyNA <- function(m) apply(is.na(m), 1L, any)
 #' Soft (Mfuzz) or hard (kmeans) clustering of per-protein trajectories. By
 #' default operates on the unique-cell trajectory matrix (baseline once) from
 #' \code{\link{tps_trajectory_matrix}}, fixing the legacy inflation caused by
-#' copying baseline per condition. Mfuzz is used when available; otherwise
-#' kmeans is the fallback.
+#' copying baseline per condition. The default \code{method = "mfuzz"}
+#' requires the optional Mfuzz, Biobase, and e1071 packages. Use
+#' \code{method = "kmeans"} explicitly for the dependency-free alternative;
+#' the function does not switch methods automatically.
 #'
 #' Clustering is an adapter, not a methodological contribution; the package
 #' does not claim to find an "optimal K".
@@ -167,7 +169,7 @@ tps_cluster_trajectories <- function(trajectory, method = c("mfuzz","kmeans"),
     cluster <- cl$cluster
     centroids <- t(cl$centers)  # cells x clusters
     } else {
-      ## kmeans fallback
+      ## kmeans alternative
       km <- stats::kmeans(mat_fit, centers = k, nstart = 25L)
       cluster <- km$cluster
       membership <- NULL

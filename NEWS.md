@@ -22,7 +22,8 @@
 - Pathway snapshots: `tps_pathway_scores()` NET/REM/COH;
   `tps_calibrate_pathways()` abundance-stratified permutation with a
   default inter-gene VIF adjustment (`intergene = "vif"`) so competitive
-  NET/REM p-values account for member correlation (ADR 0010;
+  NET p-values account for member correlation and REM uses the same correction
+  as a documented first-order approximation (ADR 0010;
   `intergene = "none"` is the historical permutation);
   `tps_classify_pathways()`.
 - Pathway dynamics: `tps_classify_pathway_dynamics()`,

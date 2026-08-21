@@ -57,6 +57,7 @@ ann <- data.frame(
   gene_name = sprintf("gene%04d", seq_len(n_prot)),
   stringsAsFactors = FALSE
 )
+rownames(ann) <- ann$protein_id
 
 ## per-protein baseline abundance on log2 scale, broadly ~ N(18, 4)
 mu0 <- rnorm(n_prot, mean = 18, sd = 4)
@@ -128,15 +129,39 @@ miss_frac <- 0.05
 miss_idx <- sample.int(length(expr), size = floor(miss_frac * length(expr)))
 expr[miss_idx] <- NA
 
-## ---- minimal KEGG-like pathway mapping -----------------------------------
-## 12 toy pathways of sizes 8-20, mapping to locus_tag.
-term2gene <- do.call(rbind, lapply(1:12, function(g) {
-  k <- sample(8:20, 1)
-  data.frame(
-    term = sprintf("org%05d", 20000 + g),
-    gene = sample(ann$locus_tag, k),
-    stringsAsFactors = FALSE)
+## ---- minimal pathway mapping ---------------------------------------------
+## Twelve deterministic toy pathways. The first eight follow the known
+## feature-level effect blocks above, so the shipped example demonstrates
+## directional, condition-dependent, transient, and null pathway behavior
+## instead of only proving that the API runs. The remaining four overlap
+## effect blocks to exercise mixed membership. No real pathway data are used.
+effect_type <- vapply(seq_len(n_prot), function(i) assign_effect(i)$type,
+                      character(1L))
+ids_by_effect <- split(ann$locus_tag, effect_type)
+pathway_members <- list(
+  toy_shared_up = ids_by_effect$shared_up,
+  toy_shared_down = ids_by_effect$shared_down,
+  toy_acid_specific_up = ids_by_effect$acid_specific_up,
+  toy_hypoxia_specific_up = ids_by_effect$hypoxia_specific_up,
+  toy_starvation_specific_down = ids_by_effect$starvation_specific_down,
+  toy_opposite_acid_hypoxia = ids_by_effect$opposite_ah,
+  toy_transient = ids_by_effect$transient,
+  toy_null = ids_by_effect$null,
+  toy_mixed_shared = c(head(ids_by_effect$shared_up, 12),
+                       head(ids_by_effect$shared_down, 12)),
+  toy_mixed_condition = c(head(ids_by_effect$acid_specific_up, 12),
+                          head(ids_by_effect$hypoxia_specific_up, 12)),
+  toy_condition_response = c(head(ids_by_effect$acid_specific_up, 8),
+                             head(ids_by_effect$hypoxia_specific_up, 8),
+                             head(ids_by_effect$starvation_specific_down, 8)),
+  toy_heterogeneous = unlist(lapply(ids_by_effect[names(ids_by_effect) != "null"],
+                                    head, 2), use.names = FALSE)
+)
+term2gene <- do.call(rbind, lapply(names(pathway_members), function(term) {
+  data.frame(term = term, gene = pathway_members[[term]],
+             stringsAsFactors = FALSE)
 }))
+rownames(term2gene) <- NULL
 
 ## ---- save: lazy-loaded data/ + file-based inst/extdata -------------------
 pkg_root <- normalizePath(".", winslash = "/")
@@ -150,7 +175,7 @@ extdata <- file.path(pkg_root, "inst", "extdata")
 dir.create(extdata, showWarnings = FALSE, recursive = TRUE)
 write.csv(expr, file.path(extdata, "example_abundance.csv"), row.names = TRUE)
 write.csv(metadata, file.path(extdata, "example_metadata.csv"), row.names = TRUE)
-write.csv(ann, file.path(extdata, "example_annotation.csv"), row.names = FALSE)
+write.csv(ann, file.path(extdata, "example_annotation.csv"), row.names = TRUE)
 write.csv(term2gene, file.path(extdata, "example_term2gene.csv"), row.names = FALSE)
 
 ## Lazy-loaded copies under data/ (named objects, used in examples)

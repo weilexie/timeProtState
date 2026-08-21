@@ -1,0 +1,89 @@
+timeProtState
+================
+
+# timeProtState
+
+> Contrast-aware dynamic state analysis for time-course proteomics
+
+`timeProtState` is an R/Bioconductor-style package for analyzing
+**shared-baseline, multi-condition time-course proteomics** experiments.
+It provides:
+
+- **Shared-baseline contrast grammar**: automatic construction of
+  estimable, full-rank contrast families from a saturated group-means
+  design (baseline modeled once, not copied per condition).
+- **Evidence-decomposed protein states**: temporal,
+  condition-heterogeneity, and direction axes combined into auditable
+  state labels.
+- **Permutation-calibrated pathway states**: NET (net direction), REM
+  (remodeling magnitude), COH (coherence), with an abundance-stratified
+  null and a default inter-gene VIF adjustment for member correlation.
+- **Optional repeated measures**: `tps_fit(block, correlation)` passes a
+  subject block to `limma::lmFit`; the consensus correlation is estimated
+  with `limma::duplicateCorrelation()` when `correlation` is omitted.
+- **Correlated-pathway simulation**: `tps_simulate_correlated_pathways()`
+  generates known-truth data with compound-symmetric within-pathway
+  correlation for type-I / power checks.
+
+## Installation
+
+``` r
+# From a local clone/source directory:
+# remotes::install_local(".")
+```
+
+## Quick start
+
+``` r
+library(timeProtState)
+data("tps_example", package = "timeProtState")
+
+se <- tps_import(tps_example_abundance, tps_example_metadata,
+                 tps_example_annotation)
+design <- tps_make_design(se)
+contrasts <- tps_make_contrasts(design, endpoint = 7)
+fit <- tps_fit(se, design, contrasts)
+states <- tps_classify_states(fit)
+states
+```
+
+When the same biological unit is followed over time, pass `block` (a
+`colData` column or a sample-aligned vector). The package does not treat
+a column named `replicate` as a block by default.
+
+``` r
+## Only when subject_id identifies the SAME biological unit over time.
+# fit_rm <- tps_fit(se, design, contrasts, block = "subject_id")
+```
+
+See the vignettes for pathway analysis (`family = "vs_baseline"`),
+visualization, and `tps_simulate_correlated_pathways()`.
+
+## Public validation
+
+Package examples and tests use the synthetic `tps_example` object (200
+features × 30 samples). The publication benchmarks use only public data and
+known-truth simulation:
+
+- PXD006262 (single-condition longitudinal) —
+  `scripts/15_PXD006262_closest_longitudinal.R`
+- PXD065583 (multi-condition shared baseline) —
+  `scripts/21_PXD065583_ASO_benchmark.R`
+- correlated-pathway simulation —
+  `scripts/13_simulation_correlation_benchmark.R`
+
+These benchmark scripts belong to the manuscript reproducibility bundle and
+are not distributed inside this standalone package repository. The accessions
+above remain the stable public-data identifiers; use the released manuscript
+bundle to reproduce the benchmark sequence.
+
+## Scope
+
+The package starts from a **protein-level abundance matrix** (already
+quantified and log2-transformed). It does **not** process raw
+mass-spectrometry files, perform peptide-to-protein summarization, or
+impute by default.
+
+## License
+
+Artistic-2.0

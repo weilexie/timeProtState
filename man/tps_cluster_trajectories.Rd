@@ -38,8 +38,10 @@ a list of class \code{tps_clusters} with cluster assignments,
 Soft (Mfuzz) or hard (kmeans) clustering of per-protein trajectories. By
 default operates on the unique-cell trajectory matrix (baseline once) from
 \code{\link{tps_trajectory_matrix}}, fixing the legacy inflation caused by
-copying baseline per condition. Mfuzz is used when available; otherwise
-kmeans is the fallback.
+copying baseline per condition. The default \code{method = "mfuzz"}
+requires the optional Mfuzz, Biobase, and e1071 packages. Use
+\code{method = "kmeans"} explicitly for the dependency-free alternative;
+the function does not switch methods automatically.
 }
 \details{
 Clustering is an adapter, not a methodological contribution; the package
