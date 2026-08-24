@@ -2,7 +2,7 @@
 % Please edit documentation in R/pathway-dynamics.R
 \name{tps_classify_pathway_dynamics}
 \alias{tps_classify_pathway_dynamics}
-\title{Classify pathway remodeling dynamics across the time course}
+\title{Assign rule-based trajectory shape labels to pathway dynamics}
 \usage{
 tps_classify_pathway_dynamics(calibrated, alpha = 0.05, coh_cut = 0.5)
 }
@@ -23,15 +23,29 @@ a data.frame with columns: \code{term, condition, time, NET, REM,
 \description{
 Converts a calibrated pathway scores object (from
 \code{\link{tps_calibrate_pathways}} with multiple timepoints) into
-per-pathway-per-condition dynamic state labels describing HOW the pathway
-remodels over time: \code{early_directional}, \code{gradual_remodeling},
+per-pathway-per-condition \strong{rule-based trajectory shape labels}
+describing HOW the pathway remodels over time:
+\code{early_directional}, \code{gradual_remodeling},
 \code{delayed_opposition}, \code{transient_burst},
 \code{directional_delayed}, \code{sustained_remodeling}, or
-\code{no_dynamic_signal}. Cross-condition NET opposition is reported as
-the boolean column \code{is_divergent}, not as a \code{dynamic_state}
-label.
+\code{no_dynamic_signal}.
 }
 \details{
+These labels are produced by a transparent, prioritized rule engine
+(not a trained classifier). Each label is a descriptive phenotype:
+\code{gradual_remodeling} is not proven to be strictly monotonic;
+\code{transient_burst} is not proven to have a complete rise-then-fall;
+\code{sustained_remodeling} is not proven significant at every timepoint;
+\code{directional_delayed} does not prove a delayed mechanism. The rules
+are auditable (see the source of \code{.classify_one_trajectory}) and
+intended for exploratory trajectory interpretation, not as class-specific
+statistical inferences. Use \code{\link{tps_calibrate_dynamics}} for a
+trajectory-level significance test (\code{p_dynamic}/\code{q_dynamic});
+that test is independent of the shape label.
+
+Cross-condition NET opposition is reported as the boolean column
+\code{is_divergent}, not as a \code{dynamic_state} label.
+
 This is the time-course-aware upgrade of \code{\link{tps_classify_pathways}}
 (which gives a single endpoint snapshot). Use with
 \code{family = "vs_baseline"} in \code{\link{tps_pathway_scores}} to get all

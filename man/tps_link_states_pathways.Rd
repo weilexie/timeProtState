@@ -36,13 +36,17 @@ Produces a consistency diagnosis linking protein evidence states (from
 \code{\link{tps_classify_states}}) with pathway remodeling dynamics (from
 \code{\link{tps_classify_pathway_dynamics}}). For each protein state x
 pathway dynamic combination, reports whether proteins in that state are
-enriched in pathways showing that dynamic pattern.
+over-represented in pathways showing that dynamic pattern.
 }
 \details{
-This applies a standard hypergeometric enrichment test to connect
-protein-level evidence axes with pathway-level remodeling labels, enabling
-diagnoses like:
-"do temporal-reversal proteins cluster in transient-burst pathways?"
+\strong{Circularity caveat}: the hypergeometric p-value assumes the
+protein state labels and pathway dynamic labels are independent. In
+practice both are derived from the same protein set and the same
+underlying fit, so the independence assumption is violated. The results
+should be interpreted as \strong{descriptive consistency scores}, not as
+validated inferential enrichment. To obtain a valid inferential test, an
+independent partition (e.g., sample split or pathway permutation null)
+would be required; this function does not provide one.
 }
 \examples{
 data(tps_example, package = "timeProtState")

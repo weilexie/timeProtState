@@ -187,17 +187,31 @@
 }
 
 ## ---- tps_classify_pathway_dynamics -----------------------------------------
-#' Classify pathway remodeling dynamics across the time course
+#' Assign rule-based trajectory shape labels to pathway dynamics
 #'
 #' Converts a calibrated pathway scores object (from
 #' \code{\link{tps_calibrate_pathways}} with multiple timepoints) into
-#' per-pathway-per-condition dynamic state labels describing HOW the pathway
-#' remodels over time: \code{early_directional}, \code{gradual_remodeling},
+#' per-pathway-per-condition \strong{rule-based trajectory shape labels}
+#' describing HOW the pathway remodels over time:
+#' \code{early_directional}, \code{gradual_remodeling},
 #' \code{delayed_opposition}, \code{transient_burst},
 #' \code{directional_delayed}, \code{sustained_remodeling}, or
-#' \code{no_dynamic_signal}. Cross-condition NET opposition is reported as
-#' the boolean column \code{is_divergent}, not as a \code{dynamic_state}
-#' label.
+#' \code{no_dynamic_signal}.
+#'
+#' These labels are produced by a transparent, prioritized rule engine
+#' (not a trained classifier). Each label is a descriptive phenotype:
+#' \code{gradual_remodeling} is not proven to be strictly monotonic;
+#' \code{transient_burst} is not proven to have a complete rise-then-fall;
+#' \code{sustained_remodeling} is not proven significant at every timepoint;
+#' \code{directional_delayed} does not prove a delayed mechanism. The rules
+#' are auditable (see the source of \code{.classify_one_trajectory}) and
+#' intended for exploratory trajectory interpretation, not as class-specific
+#' statistical inferences. Use \code{\link{tps_calibrate_dynamics}} for a
+#' trajectory-level significance test (\code{p_dynamic}/\code{q_dynamic});
+#' that test is independent of the shape label.
+#'
+#' Cross-condition NET opposition is reported as the boolean column
+#' \code{is_divergent}, not as a \code{dynamic_state} label.
 #'
 #' This is the time-course-aware upgrade of \code{\link{tps_classify_pathways}}
 #' (which gives a single endpoint snapshot). Use with
@@ -330,12 +344,16 @@ tps_classify_pathway_dynamics <- function(calibrated, alpha = 0.05, coh_cut = 0.
 #' \code{\link{tps_classify_states}}) with pathway remodeling dynamics (from
 #' \code{\link{tps_classify_pathway_dynamics}}). For each protein state x
 #' pathway dynamic combination, reports whether proteins in that state are
-#' enriched in pathways showing that dynamic pattern.
+#' over-represented in pathways showing that dynamic pattern.
 #'
-#' This applies a standard hypergeometric enrichment test to connect
-#' protein-level evidence axes with pathway-level remodeling labels, enabling
-#' diagnoses like:
-#' "do temporal-reversal proteins cluster in transient-burst pathways?"
+#' \strong{Circularity caveat}: the hypergeometric p-value assumes the
+#' protein state labels and pathway dynamic labels are independent. In
+#' practice both are derived from the same protein set and the same
+#' underlying fit, so the independence assumption is violated. The results
+#' should be interpreted as \strong{descriptive consistency scores}, not as
+#' validated inferential enrichment. To obtain a valid inferential test, an
+#' independent partition (e.g., sample split or pathway permutation null)
+#' would be required; this function does not provide one.
 #'
 #' @param states a \code{tps_states} object.
 #' @param pathway_dynamics a data.frame from \code{tps_classify_pathway_dynamics}.
@@ -622,15 +640,23 @@ tps_divergence_score <- function(calibrated, dyn = NULL, alpha = 0.05) {
 }
 
 ## ---- permutation-calibrated dynamic states ---------------------------------
-#' Calibrate pathway dynamic states with a permutation null
+#' Calibrate trajectory-level departure with a permutation null
 #'
 #' Permutes protein labels within the calibrated pathway score universe and
 #' compares each observed pathway-condition trajectory with the permutation
 #' distribution of its maximum standardized NET/REM evidence across time.
 #' This trajectory-level test accounts for searching across timepoints and
-#' both evidence components. The dynamic state remains a descriptive shape
-#' label; p_dynamic tests departure from the trajectory null, not the
-#' probability of a particular label.
+#' both evidence components.
+#'
+#' \strong{Important}: \code{p_dynamic}/\code{q_dynamic} test whether the
+#' trajectory as a whole departs from the permutation null. They do NOT
+#' validate or certify a particular \code{dynamic_state} shape label. The
+#' shape label (from \code{\link{tps_classify_pathway_dynamics}}) is a
+#' rule-based descriptive phenotype; \code{q_dynamic} is an independent
+#' trajectory-level significance test. A pathway can have a significant
+#' \code{q_dynamic} with any shape label, or a non-significant
+#' \code{q_dynamic} with a non-trivial label — the two outputs answer
+#' different questions and must not be used to infer one from the other.
 #'
 #' @param calibrated a \code{tps_pathway_calibrated} object.
 #' @param n_perm integer; number of permutations for the null (default 500).

@@ -2,7 +2,7 @@
 % Please edit documentation in R/pathway-dynamics.R
 \name{tps_calibrate_dynamics}
 \alias{tps_calibrate_dynamics}
-\title{Calibrate pathway dynamic states with a permutation null}
+\title{Calibrate trajectory-level departure with a permutation null}
 \usage{
 tps_calibrate_dynamics(
   calibrated,
@@ -35,9 +35,18 @@ Permutes protein labels within the calibrated pathway score universe and
 compares each observed pathway-condition trajectory with the permutation
 distribution of its maximum standardized NET/REM evidence across time.
 This trajectory-level test accounts for searching across timepoints and
-both evidence components. The dynamic state remains a descriptive shape
-label; p_dynamic tests departure from the trajectory null, not the
-probability of a particular label.
+both evidence components.
+}
+\details{
+\strong{Important}: \code{p_dynamic}/\code{q_dynamic} test whether the
+trajectory as a whole departs from the permutation null. They do NOT
+validate or certify a particular \code{dynamic_state} shape label. The
+shape label (from \code{\link{tps_classify_pathway_dynamics}}) is a
+rule-based descriptive phenotype; \code{q_dynamic} is an independent
+trajectory-level significance test. A pathway can have a significant
+\code{q_dynamic} with any shape label, or a non-significant
+\code{q_dynamic} with a non-trivial label — the two outputs answer
+different questions and must not be used to infer one from the other.
 }
 \examples{
 sim <- tps_simulate_timecourse(

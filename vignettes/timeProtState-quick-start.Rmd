@@ -138,9 +138,17 @@ ave <- as.numeric(tapply(
 pws_c <- tps_calibrate_pathways(pws, abundance = ave, n_perm = 200, seed = 1)
 
 ## Classify pathway remodeling dynamics across the time course
+## These are rule-based trajectory shape labels (descriptive phenotypes,
+## not class-specific statistical inferences). See ?tps_classify_pathway_dynamics
+## for the rule definitions and their limitations.
 dyn <- tps_classify_pathway_dynamics(pws_c)
 head(dyn)
 table(dyn$dynamic_state)
+
+## For a trajectory-level significance test (independent of the shape label),
+## use tps_calibrate_dynamics(). q_dynamic tests whether the trajectory as a
+## whole departs from the permutation null; it does not validate any label.
+## dyn_cal <- tps_calibrate_dynamics(pws_c, n_perm = 200, seed = 1)
 
 ## Single-pathway trajectory plot (NET over time, by condition)
 ## tps_plot_pathway_trajectory(pws_c, term = rownames(pws_c$scores$NET)[1])
