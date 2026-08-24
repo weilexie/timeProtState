@@ -37,9 +37,10 @@ are supplied.
 Run the **public** sequence documented in
 `05_validation/02_timeProtState-paper/README.md`:
 
-- `scripts/13_simulation_correlation_benchmark.R`
-- `scripts/15_PXD006262_closest_longitudinal.R`
-- `scripts/21_PXD065583_ASO_benchmark.R`
+- `scripts/04_simulation_correlation_benchmark.R`
+- `scripts/05_PXD006262_closest_longitudinal.R`
+- `scripts/06_PXD065583_ASO_benchmark.R`
+- `scripts/07_trajectory_recovery_benchmark.R`
 
 Confirm that:
 
@@ -48,7 +49,7 @@ Confirm that:
 - comparison methods use the same pathway mappings and correction contract;
 - NET is compared with CAMERA directional and REM with CAMERA mixed;
   self-contained methods are not ranked by discovery count;
-- the generated public CSVs (`results/13–16`, `15/17–20`, `21–24`) match
+- the generated public CSVs (`results/04–07`, `08–13`, `14–18`) match
   the numbers reported in STATUS;
 - no discovery-count comparison is described as sensitivity, specificity,
   or superiority without pathway-level ground truth.

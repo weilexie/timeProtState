@@ -1,5 +1,7 @@
-# R CMD check via r-lib/actions on Windows/macOS/ubuntu (release + devel)
-# Minimal first-pass matrix; expand before Bioconductor submission.
+# R CMD check via r-lib/actions on Windows/macOS/ubuntu (release only)
+# T15: matrix comment fixed — only release is run; devel/Bioc-devel is a
+# future expansion. error-on changed from 'note' to 'warning' so that the
+# expected CRAN "New submission" NOTE does not fail CI.
 name: R-CMD-check
 
 on:
@@ -44,4 +46,4 @@ jobs:
       - uses: r-lib/actions/check-r-package@v2
         with:
           args: 'c("--no-manual", "--as-cran")'
-          error-on: '"note"'
+          error-on: '"warning"'

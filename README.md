@@ -66,11 +66,13 @@ features × 30 samples). The publication benchmarks use only public data and
 known-truth simulation:
 
 - PXD006262 (single-condition longitudinal) —
-  `scripts/15_PXD006262_closest_longitudinal.R`
+  `scripts/05_PXD006262_closest_longitudinal.R`
 - PXD065583 (multi-condition shared baseline) —
-  `scripts/21_PXD065583_ASO_benchmark.R`
+  `scripts/06_PXD065583_ASO_benchmark.R`
 - correlated-pathway simulation —
-  `scripts/13_simulation_correlation_benchmark.R`
+  `scripts/04_simulation_correlation_benchmark.R`
+- trajectory recovery —
+  `scripts/07_trajectory_recovery_benchmark.R`
 
 These benchmark scripts belong to the manuscript reproducibility bundle and
 are not distributed inside this standalone package repository. The accessions
