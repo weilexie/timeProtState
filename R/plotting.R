@@ -355,7 +355,20 @@ tps_plot_pathway_trajectory <- function(calibrated, term,
     tps_abort("term '%s' not found in pathway scores.", term)
   }
   ## build long data for this pathway
-  meta <- .parse_contrast_time_pub(colnames(calibrated$scores[[metric]]))
+  ## T02/M1: prefer contrast_meta from the object (authoritative) over
+  ## re-parsing contrast name strings.
+  cm <- calibrated$contrast_meta
+  contrast_names <- colnames(calibrated$scores[[metric]])
+  if (is.data.frame(cm) &&
+      all(c("contrast", "condition", "time") %in% names(cm)) &&
+      length(contrast_names) == nrow(cm) &&
+      all(cm$contrast %in% contrast_names) &&
+      any(!is.na(cm$time))) {
+    meta <- cm[match(contrast_names, cm$contrast), , drop = FALSE]
+    meta <- meta[, c("contrast", "condition", "time")]
+  } else {
+    meta <- .parse_contrast_time_pub(contrast_names)
+  }
   vals <- calibrated$scores[[metric]][term, ]
   q_name <- if (identical(metric, "REM")) "q_rem" else "q_net"
   qvals <- calibrated[[q_name]][term, ]

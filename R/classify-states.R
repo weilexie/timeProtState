@@ -235,8 +235,15 @@ tps_classify_states <- function(fit, rule = NULL) {
       dir[i] <- "ns"
     }
   }
-  parsed <- .parse_endpoint_contrast(end_rows$contrast)
-  data.frame(feature_id = end_rows$feature_id, condition = parsed$condition,
+  ## T02/M1: prefer the condition column carried on the statistics table
+  ## (authoritative, from tps_make_contrasts). Fall back to name parsing for
+  ## objects without metadata (legacy/bare-matrix path).
+  if ("condition" %in% names(end_rows) && any(!is.na(end_rows$condition))) {
+    cond <- end_rows$condition
+  } else {
+    cond <- .parse_endpoint_contrast(end_rows$contrast)$condition
+  }
+  data.frame(feature_id = end_rows$feature_id, condition = cond,
              dir = dir, sig = sig,
              stringsAsFactors = FALSE)
 }
@@ -269,10 +276,17 @@ tps_classify_states <- function(fit, rule = NULL) {
   if (nrow(vsbl_rows) == 0L) return(setNames(logical(0), character(0)))
   feats <- unique(vsbl_rows$feature_id)
   result <- setNames(rep(FALSE, length(feats)), feats)
-  ## parse condition + time from contrast name "Cond_tX_vs_baseline"
-  parsed <- .parse_vsbl_contrast(vsbl_rows$contrast)
-  vsbl_rows$.condition <- parsed$condition
-  vsbl_rows$.time <- parsed$time
+  ## T02/M1: prefer condition/time columns from the statistics table
+  ## (authoritative); fall back to name parsing for legacy objects.
+  if ("condition" %in% names(vsbl_rows) && any(!is.na(vsbl_rows$condition)) &&
+      "time" %in% names(vsbl_rows) && any(!is.na(vsbl_rows$time))) {
+    vsbl_rows$.condition <- as.character(vsbl_rows$condition)
+    vsbl_rows$.time <- as.numeric(vsbl_rows$time)
+  } else {
+    parsed <- .parse_vsbl_contrast(vsbl_rows$contrast)
+    vsbl_rows$.condition <- parsed$condition
+    vsbl_rows$.time <- parsed$time
+  }
   for (f in feats) {
     fr <- vsbl_rows[vsbl_rows$feature_id == f, , drop = FALSE]
     if (nrow(fr) < 2L) next

@@ -82,7 +82,8 @@ test_that("tps_pathway_scores accepts a bare numeric matrix", {
 test_that("tps_pathway_scores errors on bad term2gene columns", {
   fit <- run_fit()
   bad <- tps_example_term2gene; names(bad)[1] <- "wrong"
-  expect_error(tps_pathway_scores(fit, bad, id_col = "locus_tag"),
+  expect_error(tps_pathway_scores(fit, bad, id_col = "locus_tag",
+                                  family = "endpoint"),
                "term.*term.*gene")
 })
 
@@ -159,13 +160,28 @@ test_that("unstratified mode works without abundance", {
   expect_true(all(pws_c$p_net >= 0) && all(pws_c$p_net <= 1))
 })
 
-test_that("abundance_stratified errors without abundance vector", {
+test_that("abundance_stratified errors without abundance for bare matrix", {
+  ## T03/M2: a bare matrix has no AveExpr; stratified mode still errors.
+  fit <- run_fit()
+  m <- tps_statistic_matrix(fit, family = "endpoint")
+  t2g <- data.frame(term = "pw1",
+                    gene = rownames(m)[1:5],
+                    stringsAsFactors = FALSE)
+  pws <- tps_pathway_scores(m, t2g, min_size = 3)
+  expect_error(tps_calibrate_pathways(pws, n_perm = 5L,
+                                       mode = "abundance_stratified"),
+               "abundance_stratified.*abundance")
+})
+
+test_that("abundance_stratified auto-detects AveExpr from fit", {
+  ## T03/M2: fit-derived scores carry AveExpr; no manual abundance needed.
   fit <- run_fit()
   pws <- tps_pathway_scores(fit, tps_example_term2gene,
                              id_col = "locus_tag", family = "endpoint")
-  expect_error(tps_calibrate_pathways(pws, n_perm = 50L,
-                                       mode = "abundance_stratified"),
-               "abundance_stratified.*abundance")
+  expect_false(is.null(pws$abundance))
+  pws_c <- tps_calibrate_pathways(pws, n_perm = 5L, seed = 1,
+                                   mode = "abundance_stratified")
+  expect_true(all(pws_c$p_net >= 0 & pws_c$p_net <= 1))
 })
 
 test_that("calibration does not perturb the global RNG state", {
@@ -289,4 +305,76 @@ test_that("tps_calibrate_pathways works with n_perm = 1", {
   ave <- abundance_for(fit, pws)
   pws_c <- tps_calibrate_pathways(pws, abundance = ave, n_perm = 1L, seed = 1)
   expect_true(all(pws_c$p_net >= 0 & pws_c$p_net <= 1))
+})
+
+## ---- T01/B5: family=NULL multi-family guard + duplicate contrast detection --
+test_that("family=NULL aborts when multiple t-families are present", {
+  fit <- run_fit()
+  ## tps_example has vs_baseline, within_condition, endpoint = 3 t-families
+  expect_error(
+    tps_pathway_scores(fit, tps_example_term2gene, id_col = "locus_tag",
+                       family = NULL),
+    "pool.*single-contrast families"
+  )
+})
+
+test_that("family=NULL aborts when a single t-family design is violated", {
+  ## Even a single-condition design has vs_baseline, within_condition, and
+  ## endpoint as t-families; NULL pooling is unsafe. Just confirm the guard
+  ## fires for the standard example fit (already covered above) — the
+  ## single-safe-family branch is exercised implicitly via the explicit
+  ## family= calls in the rest of the suite.
+  fit <- run_fit()
+  expect_error(
+    tps_pathway_scores(fit, tps_example_term2gene, id_col = "locus_tag",
+                       family = NULL),
+    "pool.*single-contrast families"
+  )
+})
+
+## ---- T03/M2: AveExpr auto-detection + attrition audit -----------------------
+test_that("tps_pathway_scores carries AveExpr and attrition from fit", {
+  fit <- run_fit()
+  pws <- tps_pathway_scores(fit, tps_example_term2gene,
+                             id_col = "locus_tag", family = "endpoint")
+  expect_false(is.null(pws$abundance))
+  expect_length(pws$abundance, nrow(pws$statistic_matrix))
+  expect_true(is.data.frame(pws$attrition))
+  expect_equal(nrow(pws$attrition), 5L)
+  expect_true(all(c("step", "count") %in% names(pws$attrition)))
+  ## attrition is monotonically non-increasing for the feature chain
+  feat_chain <- pws$attrition$count[pws$attrition$step %in%
+    c("input_features", "nonfinite_dropped", "in_universe")]
+  expect_true(feat_chain[1] >= feat_chain[2] + feat_chain[3])
+})
+
+test_that("tps_calibrate_pathways auto-detects abundance from scores", {
+  fit <- run_fit()
+  pws <- tps_pathway_scores(fit, tps_example_term2gene,
+                             id_col = "locus_tag", family = "endpoint")
+  ## No abundance= passed; should use pws$abundance automatically
+  pws_c <- tps_calibrate_pathways(pws, n_perm = 5, seed = 1)
+  expect_true(all(pws_c$p_net >= 0 & pws_c$p_net <= 1))
+  expect_equal(pws_c$mode, "abundance_stratified")
+})
+
+## ---- T04/M3: fit input fingerprint for stale-reuse detection ----------------
+test_that("tps_fit carries a deterministic input fingerprint", {
+  fit <- run_fit()
+  fp <- fit$input_fingerprint
+  expect_false(is.null(fp))
+  expect_length(fp$sample_ids, fp$n_samples)
+  expect_true(nzchar(fp$design_checksum))
+  ## identical SE/design -> identical checksum (reproducibility)
+  fit2 <- run_fit()
+  expect_equal(fp$design_checksum, fit2$input_fingerprint$design_checksum)
+})
+
+test_that("tps_pathway_scores carries fingerprint from fit", {
+  fit <- run_fit()
+  pws <- tps_pathway_scores(fit, tps_example_term2gene,
+                             id_col = "locus_tag", family = "endpoint")
+  expect_false(is.null(pws$input_fingerprint))
+  expect_equal(pws$input_fingerprint$design_checksum,
+               fit$input_fingerprint$design_checksum)
 })

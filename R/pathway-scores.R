@@ -87,8 +87,11 @@
 #'   \code{"logFC"}, or \code{"signed_log10p"}.
 #' @param family character; if \code{fit} is a \code{tps_fit}, restrict to this
 #'   contrast family (e.g. \code{"vs_baseline"} or \code{"endpoint"}). If
-#'   \code{NULL}, every single-contrast (t) family is pooled, which can
-#'   double-count the same algebraic contrast. Ignored if a matrix is supplied.
+#'   \code{NULL} and exactly one single-contrast (t) family is present, that
+#'   family is used. If \code{NULL} and multiple t-families are present, the
+#'   call aborts because pooling can double-count algebraically identical
+#'   contrasts (e.g. endpoint vs vs_baseline at the endpoint timepoint).
+#'   Ignored if a matrix is supplied.
 #' @param id_col character; if feature ids in the fit come from a rowData column
 #'   (e.g. locus tags) rather than row names, name that column. If \code{NULL},
 #'   row names of the statistic matrix are used.
@@ -142,7 +145,44 @@ tps_pathway_scores <- function(fit, term2gene, type = "moderated_t",
   pathway_ids <- NULL
   residual_mat <- NULL
   if (inherits(fit, "tps_fit")) {
+    ## T01/B5: family=NULL pools every single-contrast (t) family. In a
+    ## shared-baseline design, endpoint is algebraically a subset of
+    ## vs_baseline at the endpoint timepoint, so pooling double-counts the
+    ## same contrast in NET/REM. Require an explicit family when more than
+    ## one t-family is present.
+    if (is.null(family)) {
+      ct <- fit$contrasts$contrast_table
+      t_families <- if (is.data.frame(ct) && "test" %in% names(ct) &&
+                        "family" %in% names(ct)) {
+        unique(as.character(ct$family[ct$test == "t"]))
+      } else character(0)
+      if (length(t_families) > 1L) {
+        tps_abort(paste0(
+          "family=NULL would pool ", length(t_families),
+          " single-contrast families (", paste(t_families, collapse = ", "),
+          "). This can double-count algebraically identical contrasts ",
+          "(e.g. endpoint vs vs_baseline at the endpoint timepoint). ",
+          "Specify family= explicitly (commonly 'vs_baseline' or 'endpoint')."
+        ))
+      }
+      if (length(t_families) == 0L) {
+        tps_abort("fit has no single-contrast (t) families to score.")
+      }
+    }
     stat_mat <- tps_statistic_matrix(fit, type = type, family = family)
+    ## T01: detect algebraically duplicate contrasts (identical statistic
+    ## columns). Within a single well-formed family this should not occur;
+    ## a hit signals a family-construction or pooling bug.
+    if (ncol(stat_mat) >= 2L) {
+      dup_cols <- anyDuplicated(as.data.frame(stat_mat))
+      if (dup_cols > 0L) {
+        tps_warn(paste0(
+          "statistic matrix has duplicate columns at position ", dup_cols,
+          " and ", dup_cols + 1L, "; two contrasts are algebraically ",
+          "identical. Check family selection and contrast construction."
+        ))
+      }
+    }
     if (!is.null(fit$residuals)) {
       residual_mat <- fit$residuals
     }
@@ -208,6 +248,22 @@ tps_pathway_scores <- function(fit, term2gene, type = "moderated_t",
     tps_abort("statistic matrix has no features finite across all selected contrasts.")
   }
 
+  ## T03/M2: carry AveExpr from the fit so tps_calibrate_pathways can derive
+  ## abundance_stratified bins without the user manually rebuilding it.
+  ave_expr <- NULL
+  if (inherits(fit, "tps_fit") && "AveExpr" %in% names(fit$statistics)) {
+    st <- fit$statistics[fit$statistics$test == "t", , drop = FALSE]
+    if (nrow(st) > 0L) {
+      ## one AveExpr per feature; AveExpr is feature-level (same across contrasts)
+      ave_df <- unique(st[, c("feature_id", "AveExpr")])
+      ave_df <- ave_df[match(rownames(stat_mat), ave_df$feature_id), ,
+                       drop = FALSE]
+      if (nrow(ave_df) == nrow(stat_mat) && all(!is.na(ave_df$AveExpr))) {
+        ave_expr <- setNames(ave_df$AveExpr, ave_df$feature_id)
+      }
+    }
+  }
+
   M <- .build_membership(term2gene, universe, min_size = 0L)
   lib_size <- attr(M, "library_size")
   obs_size <- attr(M, "observed_size")
@@ -247,6 +303,41 @@ tps_pathway_scores <- function(fit, term2gene, type = "moderated_t",
     coverage = obs_size / pmax(lib_size, 1L),
     stringsAsFactors = FALSE)
 
+  ## T03/M2: attrition/coverage audit — counts from input features down to
+  ## the final pathway universe so reviewers can trace why N differs per step.
+  attrition <- data.frame(
+    step = c("input_features", "nonfinite_dropped", "in_universe",
+             "pathways_in_term2gene", "pathways_after_filters"),
+    count = c(length(feature_ids),
+             length(dropped_nonfinite),
+             length(universe),
+             length(unique(as.character(term2gene$term))),
+             nrow(M)),
+    stringsAsFactors = FALSE)
+
+  ## T02/M1: carry contrast metadata from the fit's contrast_table so
+  ## downstream consumers (pathway-dynamics, plotting) read condition/time
+  ## from the object instead of re-parsing contrast name strings. NULL for
+  ## bare matrices (no upstream contrast construction).
+  contrast_meta <- NULL
+  if (inherits(fit, "tps_fit") && !is.null(fit$contrasts) &&
+      is.data.frame(fit$contrasts$contrast_table)) {
+    ct <- fit$contrasts$contrast_table
+    keep_t <- ct$test == "t"
+    if (is.null(family)) {
+      ## T01 guard already ensured exactly one t-family; use it.
+      cm_sub <- ct[keep_t, , drop = FALSE]
+    } else {
+      cm_sub <- ct[keep_t & ct$family == family, , drop = FALSE]
+    }
+    ## align row order to stat_mat columns
+    cm_sub <- cm_sub[match(colnames(stat_mat), cm_sub$contrast), ,
+                     drop = FALSE]
+    if (nrow(cm_sub) == ncol(stat_mat)) {
+      contrast_meta <- cm_sub
+    }
+  }
+
   all_pathways <- unique(as.character(term2gene$term))
   all_pathways <- all_pathways[!is.na(all_pathways) & nzchar(all_pathways)]
   out <- structure(
@@ -257,6 +348,7 @@ tps_pathway_scores <- function(fit, term2gene, type = "moderated_t",
       statistic_matrix = stat_mat,
       residuals = residual_mat,
       statistic_type = type,
+      contrast_meta = contrast_meta,
       universe = universe,
       feature_ids = rownames(stat_mat),
       id_mapping = data.frame(feature_id = rownames(stat_mat),
@@ -264,6 +356,12 @@ tps_pathway_scores <- function(fit, term2gene, type = "moderated_t",
                               stringsAsFactors = FALSE),
       min_size = min_size,
       min_coverage = min_coverage,
+      abundance = ave_expr,
+      attrition = attrition,
+      ## T04/M3: carry the fit's input fingerprint so calibrate/dynamics can
+      ## detect stale reuse (e.g. a calibrated object from an old fit reused
+      ## with a new design). NULL for bare matrices.
+      input_fingerprint = if (inherits(fit, "tps_fit")) fit$input_fingerprint else NULL,
       dropped_pathways = setdiff(all_pathways, rownames(M)),
       dropped_features_nonfinite = dropped_nonfinite,
       provenance = list(.make_provenance(arg_capture, fit, stage = "pathway_scores"))

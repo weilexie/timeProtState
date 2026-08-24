@@ -337,21 +337,51 @@ tps_make_contrasts <- function(design, endpoint = NULL,
 }
 
 ## ---- flatten --------------------------------------------------------------
+## Enrich the contrast table with condition/time fields parsed from contrast
+## names at construction time (the authoritative source). Downstream consumers
+## (pathway-dynamics, plotting) read these fields from the object metadata
+## instead of re-parsing strings, so a renamed or pooled contrast cannot
+## silently change condition/time mapping. F_omnibus contrasts have no
+## single condition/time (NA).
 .flatten_contrast_table <- function(families, family_meta) {
   rows <- list()
   for (fn in names(families)) {
     cm <- families[[fn]]
     mm <- family_meta[[fn]]
     if (is.null(cm) || length(cm) == 0L) next
+    conds <- if ("reference" %in% names(mm)) mm$reference else mm$condition
     for (k in seq_len(ncol(cm))) {
+      cn <- colnames(cm)[k]
+      parsed <- .parse_contrast_meta(cn)
       rows[[length(rows) + 1L]] <- data.frame(
         family = fn,
-        contrast = colnames(cm)[k],
+        contrast = cn,
         test = mm$test[k],
+        condition = parsed$condition,
+        time = parsed$time,
         stringsAsFactors = FALSE)
     }
   }
   do.call(rbind, rows)
+}
+
+## Authoritative single parser for contrast names. Handles vs_baseline
+## ('<condition>_t<time>_vs_baseline') and endpoint
+## ('endpoint_<condition>_t<time>_vs_baseline') families. Returns NA
+## condition/time for names that do not match (F_omnibus, within_condition,
+## etc.). Centralizing this means downstream code no longer maintains its own
+## regex copy.
+.parse_contrast_meta <- function(contrast_name) {
+  has_vs_bl <- grepl("_vs_baseline$", contrast_name)
+  base <- sub("_vs_baseline$", "", contrast_name)
+  ## endpoint prefix is a family marker, not part of the condition name
+  base <- sub("^endpoint_", "", base)
+  time <- suppressWarnings(as.numeric(sub("^.*_t", "", base)))
+  cond <- sub("_t[^_]+$", "", base)
+  is_typed <- has_vs_bl && !is.na(time) && nzchar(cond) &&
+    grepl("_t[0-9.]+_vs_baseline$", contrast_name)
+  list(condition = if (is_typed) cond else NA_character_,
+       time = if (is_typed) time else NA_real_)
 }
 
 ## ---- methods ---------------------------------------------------------------

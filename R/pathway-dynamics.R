@@ -16,13 +16,29 @@
 ## every timepoint before permutation calibration.
 
 ## ---- contrast-time parser --------------------------------------------------
-## Parse contrast names like "Acid_t7_vs_baseline" into (condition, time).
-## Returns a data.frame with columns: contrast, condition, time.
-.parse_contrast_time <- function(contrast_names) {
-  ## strip "_vs_baseline" suffix
+## Resolve per-contrast (condition, time) metadata. Prefers the contrast_meta
+## data.frame carried on the calibrated object (authoritative, set at
+## construction by tps_make_contrasts). Falls back to string parsing of
+## '<condition>_t<time>_vs_baseline' names for objects without metadata
+## (bare matrices, legacy objects). Returns a data.frame with columns:
+## contrast, condition, time.
+.contrast_meta <- function(calibrated, contrast_names) {
+  cm <- calibrated$contrast_meta
+  if (is.data.frame(cm) &&
+      all(c("contrast", "condition", "time") %in% names(cm)) &&
+      length(contrast_names) == nrow(cm) &&
+      all(cm$contrast %in% contrast_names) &&
+      any(!is.na(cm$time))) {
+    ## use authoritative metadata, aligned to contrast order
+    cm <- cm[match(contrast_names, cm$contrast), , drop = FALSE]
+    return(cm[, c("contrast", "condition", "time")])
+  }
+  ## fallback: parse from names (legacy / bare matrix path)
+  .parse_contrast_time_string(contrast_names)
+}
+
+.parse_contrast_time_string <- function(contrast_names) {
   base <- sub("_vs_baseline$", "", contrast_names)
-  ## split on "_t" -- condition may contain underscores, time is last segment
-  ## pattern: <condition>_t<time>  e.g. "Acid_t7", "Starvation_t3"
   cond <- sub("_t[^_]+$", "", base)
   time_str <- sub("^.*_t", "", base)
   time <- suppressWarnings(as.numeric(time_str))
@@ -232,11 +248,11 @@ tps_classify_pathway_dynamics <- function(calibrated, alpha = 0.05, coh_cut = 0.
   contrasts <- colnames(NET)
 
   ## parse time + condition from contrast names
-  meta <- .parse_contrast_time(contrasts)
+  meta <- .contrast_meta(calibrated, contrasts)
   if (anyNA(meta$time)) {
     tps_abort(paste0(
-      "Could not parse timepoints from contrast names. Expected ",
-      "format '<condition>_t<time>_vs_baseline' (from family='vs_baseline')."
+      "Could not resolve timepoints from contrast metadata. Expected ",
+      "family='vs_baseline' (format '<condition>_t<time>_vs_baseline')."
     ))
   }
   if (any(grepl("^endpoint_", meta$condition))) {
@@ -689,9 +705,9 @@ tps_calibrate_dynamics <- function(calibrated, n_perm = 500L, alpha = 0.05,
   ## The observed statistic is the maximum standardized NET/REM departure over
   ## time for each pathway-condition pair. The permutation maximum automatically
   ## accounts for searching across timepoints and both evidence components.
-  meta <- .parse_contrast_time(colnames(stat_mat))
+  meta <- .contrast_meta(calibrated, colnames(stat_mat))
   if (anyNA(meta$time)) {
-    tps_abort("Could not parse every contrast as '<condition>_t<time>_vs_baseline'.")
+    tps_abort("Could not resolve every contrast as '<condition>_t<time>_vs_baseline' from metadata.")
   }
   if (any(grepl("^endpoint_", meta$condition))) {
     tps_abort("endpoint-family contrasts detected; use family='vs_baseline' in tps_pathway_scores.")

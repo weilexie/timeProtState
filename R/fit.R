@@ -198,6 +198,17 @@ tps_fit <- function(se, design, contrasts, assay_name = NULL,
       design = design,
       residuals = residuals0,
       annotation = as.data.frame(SummarizedExperiment::rowData(se)),
+      ## T04/M3: input fingerprint for stale-reuse detection. Captures sample
+      ## ids, design matrix checksum, and condition/time columns so downstream
+      ## consumers can verify the fit was built from the same SE/design they
+      ## are now passing forward.
+      input_fingerprint = list(
+        sample_ids = colnames(expr),
+        design_checksum = tps_checksum(design$design_matrix)$checksum,
+        condition_col = design$condition, time_col = design$time,
+        is_baseline_col = design$is_baseline, n_samples = ncol(expr),
+        n_features = nrow(expr)
+      ),
       provenance = list(.make_provenance(arg_capture, se, stage = "fit"))
     ),
     class = "tps_fit"
@@ -361,5 +372,11 @@ print.tps_fit <- function(x, ...) {
   fams <- unique(x$statistics$family)
   cat(sprintf("  families fitted: %s\n", paste(fams, collapse = ", ")))
   cat(sprintf("  statistics rows: %d\n", nrow(x$statistics)))
+  ## T04/M3: show provenance fingerprint so users can spot stale reuse
+  fp <- x$input_fingerprint
+  if (!is.null(fp)) {
+    cat(sprintf("  input: %d features x %d samples   design checksum: %s\n",
+                fp$n_features, fp$n_samples, fp$design_checksum))
+  }
   invisible(x)
 }

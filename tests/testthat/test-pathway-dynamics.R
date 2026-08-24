@@ -105,7 +105,7 @@ test_that("dynamics errors on endpoint-only scores (no parseable times)", {
   pws_end2$q_net <- pws_end2$q_net[, 1, drop = FALSE]
   colnames(pws_end2$scores$NET) <- "endpoint_only"
   colnames(pws_end2$q_net) <- "endpoint_only"
-  expect_error(tps_classify_pathway_dynamics(pws_end2), "Could not parse timepoints")
+  expect_error(tps_classify_pathway_dynamics(pws_end2), "Could not resolve timepoints")
 })
 
 ## ===========================================================================

@@ -207,8 +207,20 @@ tps_calibrate_pathways <- function(scores, abundance = NULL, n_perm = 1000L,
   ## abundance alignment for stratified mode
   bin_list <- NULL; bin_template <- NULL
   if (mode == "abundance_stratified") {
+    ## T03/M2: if the user did not pass abundance but the scores object
+    ## carries AveExpr from the fit, use it automatically. This makes
+    ## score -> calibration a linear path that does not require the user to
+    ## manually rebuild a hidden field.
+    if (is.null(abundance) && !is.null(scores$abundance) &&
+        is.numeric(scores$abundance)) {
+      abundance <- scores$abundance
+    }
     if (is.null(abundance)) {
-      tps_abort("mode='abundance_stratified' requires an 'abundance' vector.")
+      tps_abort(paste0(
+        "mode='abundance_stratified' requires an 'abundance' vector. ",
+        "Either pass one explicitly, or construct the scores object from ",
+        "a tps_fit (which carries AveExpr automatically) via tps_pathway_scores."
+      ))
     }
     if (length(abundance) != n_prot) {
       tps_abort("abundance length (%d) != universe size (%d).",

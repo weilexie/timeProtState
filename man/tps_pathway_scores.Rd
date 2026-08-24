@@ -27,8 +27,11 @@ tps_pathway_scores(
 
 \item{family}{character; if \code{fit} is a \code{tps_fit}, restrict to this
 contrast family (e.g. \code{"vs_baseline"} or \code{"endpoint"}). If
-\code{NULL}, every single-contrast (t) family is pooled, which can
-double-count the same algebraic contrast. Ignored if a matrix is supplied.}
+\code{NULL} and exactly one single-contrast (t) family is present, that
+family is used. If \code{NULL} and multiple t-families are present, the
+call aborts because pooling can double-count algebraically identical
+contrasts (e.g. endpoint vs vs_baseline at the endpoint timepoint).
+Ignored if a matrix is supplied.}
 
 \item{id_col}{character; if feature ids in the fit come from a rowData column
 (e.g. locus tags) rather than row names, name that column. If \code{NULL},
