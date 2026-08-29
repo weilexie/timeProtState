@@ -53,8 +53,11 @@ tps_known_optional_cols <- function() {
 }
 
 ## ---- hashing for provenance -----------------------------------------------
-## A small, dependency-free checksum used to fingerprint input matrices.
-## Not cryptographically strong; sufficient for detecting accidental edits.
+## A small, dependency-free INPUT FINGERPRINT for provenance/change detection.
+## This is NOT a cryptographic checksum: it samples at most 1000 elements and
+## summarizes them (sum of squares + count + dims), so distinct inputs can
+## collide. Use it to detect accidental edits or stale-object reuse, not to
+## certify integrity. For certified digests use digest::digest or similar.
 tps_checksum <- function(x, algo = "xxhash") {
   if (!is.matrix(x)) x <- as.matrix(x)
   ## Hash a stable representation: sample evenly across the data and combine

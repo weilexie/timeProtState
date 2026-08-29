@@ -347,6 +347,12 @@ tps_plot_pathway_trajectory <- function(calibrated, term,
   if (!inherits(calibrated, "tps_pathway_calibrated")) {
     tps_abort("calibrated must be a tps_pathway_calibrated object.")
   }
+  ## T24: fail with a readable message on NULL/empty/NA/length!=1 term
+  ## instead of an opaque downstream error.
+  if (!is.character(term) || length(term) != 1L || is.na(term) ||
+      !nzchar(term)) {
+    tps_abort("term must be one pathway name from rownames(scores$NET).")
+  }
   if (length(alpha) != 1L || is.na(alpha) || alpha <= 0 || alpha >= 1) {
     tps_abort("alpha must be in (0,1).")
   }

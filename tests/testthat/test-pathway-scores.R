@@ -378,3 +378,51 @@ test_that("tps_pathway_scores carries fingerprint from fit", {
   expect_equal(pws$input_fingerprint$design_checksum,
                fit$input_fingerprint$design_checksum)
 })
+
+## ---- T22: small-sample / degenerate-input behavior --------------------------
+test_that("pathway size 1 is retained with min_size=1 and scores are defined", {
+  m <- matrix(c(1, -2, 3), nrow = 3, dimnames = list(c("P1", "P2", "P3"), "c1"))
+  t2g <- data.frame(term = c("single", "single"), gene = c("P1", "P1"),
+                    stringsAsFactors = FALSE)
+  pws <- tps_pathway_scores(m, unique(t2g), min_size = 1)
+  expect_equal(nrow(pws$scores$NET), 1L)
+  expect_equal(pws$scores$NET[1, 1], 1)  # mean of single member
+})
+
+test_that("all-zero statistic gives COH=0 by convention (REM=0)", {
+  m <- matrix(rep(0, 3), nrow = 3, dimnames = list(paste0("P", 1:3), "c1"))
+  t2g <- data.frame(term = "pw", gene = paste0("P", 1:3),
+                    stringsAsFactors = FALSE)
+  pws <- tps_pathway_scores(m, t2g, min_size = 3)
+  expect_true(all(pws$scores$REM == 0))
+  expect_true(all(pws$scores$COH == 0))
+  ## no p_coh/q_coh exists anywhere
+  expect_false(any(grepl("p_coh|q_coh", names(pws))))
+})
+
+test_that("duplicate statistic columns trigger the duplicate warning", {
+  m <- matrix(rep(c(1, 2, 3), 2), nrow = 3,
+              dimnames = list(paste0("P", 1:3), c("dup1", "dup2")))
+  t2g <- data.frame(term = "pw", gene = paste0("P", 1:3),
+                    stringsAsFactors = FALSE)
+  expect_warning(tps_pathway_scores(m, t2g, min_size = 3),
+                 "duplicate contrast columns")
+})
+
+test_that("n_replicates=1 design fails loudly, not silently", {
+  ## T22: with one replicate per cell there are no residual df, so limma
+  ## eBayes cannot compute moderated statistics. The expected behavior is
+  ## a clear error, never silently publishable q-values.
+  set.seed(7)
+  abd <- matrix(rnorm(6 * 5), nrow = 6,
+                dimnames = list(paste0("P", 1:6), paste0("S", 1:5)))
+  cd <- data.frame(condition = c("baseline", "B", "B", "A", "A"),
+                   time = c(0, 3, 7, 3, 7),
+                   is_baseline = c(TRUE, FALSE, FALSE, FALSE, FALSE),
+                   sample_id = paste0("S", 1:5), stringsAsFactors = FALSE)
+  se <- tps_import(abd, cd)
+  design <- tps_make_design(se)
+  contrasts <- tps_make_contrasts(design, endpoint = 3)
+  expect_error(tps_fit(se, design, contrasts),
+               "No finite residual standard deviations")
+})

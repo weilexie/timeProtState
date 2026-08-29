@@ -230,15 +230,19 @@ tps_validate <- function(se, action = c("report", "abort", "warn")) {
     add_err("Protein ids are duplicated (should have been caught at import).")
   }
 
-  ## ---- check 9: organism/condition hardcoding leak (heuristic) ----------
-  ## Heuristic: flag if "Msmeg" or "MSMEG_" appears as a level name, since
-  ## the package must stay organism-agnostic (LEGACY_AUDIT 3.7).
+  ## ---- check 9: id-like condition levels (generic heuristic) --------------
+  ## Flag locus-tag-like condition levels (e.g. "MSMEG_1234", "YAL001W"),
+  ## since condition names should describe experimental conditions, not
+  ## feature ids. Pattern-based and organism-agnostic: matches short
+  ## alphabetic prefixes with a numeric suffix typical of systematic ids.
   if ("condition" %in% names(cd) && is.factor(cd$condition)) {
-    leak <- grep("MSMEG_|Msmeg", levels(cd$condition), value = TRUE)
+    leak <- grep("^[A-Za-z]{2,8}_[0-9]{3,}$", levels(cd$condition),
+                 value = TRUE)
     if (length(leak)) {
-      add_warn(paste0("condition levels look like organism-internal ids (",
+      add_warn(paste0("condition levels look like systematic feature ids (",
                       paste(head(leak, 3L), collapse = ", "),
-                      "); the package is organism-agnostic, double-check this is intended."))
+                      "); conditions should name experimental groups, ",
+                      "double-check this is intended."))
     }
   }
 

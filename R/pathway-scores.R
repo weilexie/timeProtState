@@ -75,6 +75,12 @@
 #' and approaches 0 when opposing directions cancel. This is not a simple
 #' count-based fraction of same-sign members; it weights by magnitude.
 #'
+#' \strong{COH is descriptive only}: there is no \code{p_coh}/\code{q_coh}
+#' significance test for coherence anywhere in the package. When all member
+#' statistics are exactly zero (\code{REM = 0}), the epsilon in the
+#' denominator returns \code{COH = 0}; this is a numerical convention, not
+#' evidence of incoherence.
+#'
 #' Pathways with fewer than \code{min_size} observed members (intersected with
 #' the analysis universe) are dropped.
 #'
@@ -170,19 +176,6 @@ tps_pathway_scores <- function(fit, term2gene, type = "moderated_t",
       }
     }
     stat_mat <- tps_statistic_matrix(fit, type = type, family = family)
-    ## T01: detect algebraically duplicate contrasts (identical statistic
-    ## columns). Within a single well-formed family this should not occur;
-    ## a hit signals a family-construction or pooling bug.
-    if (ncol(stat_mat) >= 2L) {
-      dup_cols <- anyDuplicated(as.data.frame(stat_mat))
-      if (dup_cols > 0L) {
-        tps_warn(paste0(
-          "statistic matrix has duplicate columns at position ", dup_cols,
-          " and ", dup_cols + 1L, "; two contrasts are algebraically ",
-          "identical. Check family selection and contrast construction."
-        ))
-      }
-    }
     if (!is.null(fit$residuals)) {
       residual_mat <- fit$residuals
     }
@@ -217,6 +210,23 @@ tps_pathway_scores <- function(fit, term2gene, type = "moderated_t",
     type <- "user_matrix"
   } else {
     tps_abort("fit must be a tps_fit object or a numeric matrix.")
+  }
+
+  ## T01: detect algebraically duplicate contrasts (identical statistic
+  ## columns), regardless of whether the input is a fit or a bare matrix.
+  ## Within a single well-formed family this should not occur; a hit signals
+  ## a family-construction or pooling bug. Compare on the TRANSPOSE so
+  ## duplicated rows of t(stat_mat) = duplicated contrast columns.
+  if (ncol(stat_mat) >= 2L) {
+    dup_cols <- anyDuplicated(as.data.frame(t(stat_mat)))
+    if (dup_cols > 0L) {
+      tps_warn(paste0(
+        "statistic matrix has duplicate contrast columns (first repeat ",
+        "at contrast position ", dup_cols + 1L, "); two contrasts are ",
+        "algebraically identical. Check family selection and contrast ",
+        "construction."
+      ))
+    }
   }
 
   feature_ids <- rownames(stat_mat)

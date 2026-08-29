@@ -64,6 +64,12 @@ measure in [0,1]: it equals 1 when all members share the same direction
 and approaches 0 when opposing directions cancel. This is not a simple
 count-based fraction of same-sign members; it weights by magnitude.
 
+\strong{COH is descriptive only}: there is no \code{p_coh}/\code{q_coh}
+significance test for coherence anywhere in the package. When all member
+statistics are exactly zero (\code{REM = 0}), the epsilon in the
+denominator returns \code{COH = 0}; this is a numerical convention, not
+evidence of incoherence.
+
 Pathways with fewer than \code{min_size} observed members (intersected with
 the analysis universe) are dropped.
 }
