@@ -57,7 +57,10 @@ Confirm that:
 Do **not** run `04_reproduce_dormancy_dynamics.R`,
 `07_comprehensive_benchmark.R`, or `12_render_figure1.R` as part of this
 gate. Those scripts and the Acid day-7 / Figure 1 artefacts are frozen
-historical leftovers.
+historical leftovers. (Note: the legacy script files themselves are no
+longer present anywhere in this workspace; they lived in the superseded
+dormancy analysis tree. The frozen Figure 1 artefacts remain under
+`06_paper/01_manuscript/figures/` and must still not be regenerated.)
 
 ## Public release and archive
 
