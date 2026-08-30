@@ -665,9 +665,10 @@ tps_divergence_score <- function(calibrated, dyn = NULL, alpha = 0.05) {
 #' @param seed integer; RNG seed.
 #' @return a data.frame with the original dynamics plus a column
 #'   \code{p_dynamic} (empirical trajectory-level p-value) and
-#'   \code{q_dynamic} (BH-adjusted). BH adjustment is applied jointly across
-#'   all pathway-condition pairs (one p_dynamic per pathway-condition
-#'   trajectory; time is absorbed into the max statistic).
+#'   \code{q_dynamic} (BH-adjusted within each condition: one multiplicity
+#'   family per condition across its pathways, so the penalty does not grow
+#'   with the number of conditions in the object; time is absorbed into the
+#'   max statistic).
 #'
 #' @examples
 #' sim <- tps_simulate_timecourse(
@@ -771,7 +772,22 @@ tps_calibrate_dynamics <- function(calibrated, n_perm = 500L, alpha = 0.05,
 
   ## Empirical trajectory-level p-value per term-condition.
   p_dynamic <- (null_count + 1) / (n_perm + 1)
-  q_dynamic <- stats::p.adjust(p_dynamic, method = "BH")
+  ## BH adjustment is applied WITHIN each condition (one family per
+  ## condition, across its pathways). A joint BH across all
+  ## pathway-condition pairs makes the multiplicity penalty proportional to
+  ## the number of conditions in the object, so an analysis with fewer
+  ## conditions (e.g. a negative-control arm) would appear systematically
+  ## more "dynamic" than a many-condition arm purely from the BH
+  ## aggregation size — an arm-size artifact, not biology. Per-condition
+  ## families remove that asymmetry; each condition's family is the natural
+  ## unit (one question per condition: which pathways depart from the
+  ## trajectory null?).
+  q_dynamic <- p_dynamic
+  cond_of <- sub("^.*##", "", names(p_dynamic))
+  for (cc in unique(cond_of)) {
+    sel <- cond_of == cc
+    q_dynamic[sel] <- stats::p.adjust(p_dynamic[sel], method = "BH")
+  }
 
   ## attach to observed dynamics (one p_dynamic per term-condition)
   dyn_obs$key <- paste(dyn_obs$term, dyn_obs$condition, sep = "##")

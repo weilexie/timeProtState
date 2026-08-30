@@ -26,9 +26,10 @@ tps_calibrate_dynamics(
 \value{
 a data.frame with the original dynamics plus a column
   \code{p_dynamic} (empirical trajectory-level p-value) and
-  \code{q_dynamic} (BH-adjusted). BH adjustment is applied jointly across
-  all pathway-condition pairs (one p_dynamic per pathway-condition
-  trajectory; time is absorbed into the max statistic).
+  \code{q_dynamic} (BH-adjusted within each condition: one multiplicity
+  family per condition across its pathways, so the penalty does not grow
+  with the number of conditions in the object; time is absorbed into the
+  max statistic).
 }
 \description{
 Permutes protein labels within the calibrated pathway score universe and

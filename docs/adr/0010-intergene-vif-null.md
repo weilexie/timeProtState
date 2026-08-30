@@ -70,19 +70,56 @@ effect as noise correlation and over-correct true NET.
 - Publication benchmarks that need the historical permutation must pass
   `intergene = "none"`.
 
-## vif_cap parameter (added 2026-08-17)
+## vif_cap parameter (added 2026-08-17; default changed 2026-08-25)
 
 The compound-symmetric VIF `1 + (k-1)*rho` grows linearly with pathway size,
 which can over-penalize real signal in large pathways. The `vif_cap` parameter
-(default `Inf`, no cap) limits the VIF to prevent over-correction.
+limits the VIF to prevent over-correction.
 
 Empirical analysis on real proteomics data shows highly variable VIF:
 - PXD006262 (yeast): median VIF 5.43, 82% of pathways exceed 3 (rho median 0.371)
 - PXD065583 (human): median VIF 1.66, 12% exceed 3 (rho median 0.022)
 
-Simulation (rho=0.5, k=10): cap=3 gives type-I 0.055 + power 0.590;
-uncapped gives type-I 0.000 + power 0.060. The optimal cap is data-dependent;
-users should inspect the `$vif` field and choose based on their data's rho distribution.
+Simulation (rho=0.5, k=10, 20 seeds, 200 perm): cap=3 gives type-I 0.055 +
+power 0.590; uncapped gives type-I 0.000 + power 0.060.
+
+### Default changed from `Inf` to `3` (2026-08-25)
+
+**Decision.** `vif_cap = 3` is now the default. `vif_cap = Inf` remains
+available for maximal type-I safety; `vif_cap = 1` disables VIF scaling.
+
+**Why.** The uncapped default made the tool unusable on real data: on
+PXD006262 the default calibration found 0 significant NET pathways at the
+endpoint (vs 6 under `intergene="none"`), and the trajectory-level
+`q_dynamic` was 0% everywhere on PXD065583 (max-statistic x joint BH x
+uncapped VIF stack up). A default that returns nothing on real data is not
+an acceptable operating point for a shipped tool, regardless of how safe it
+is in type-I terms. The 20-seed simulation identified cap=3 as the balanced
+operating point (type-I 0.055 at nominal 0.05, power 0.590 vs 0.060
+uncapped); real-data VIF distributions show the cap binds exactly where the
+noise-amplified residual rho estimate is most likely to be overstated
+(large pathways, high replicate-noise).
+
+**Mechanism note.** The residual-based rho estimate is noisy at proteomics
+replicate counts (3-4 per cell), and the VIF multiplies it by (k-1), so
+estimation noise is amplified linearly in pathway size. The cap bounds this
+amplification. On low-correlation data (PXD065583) the cap is rarely
+binding; on high-correlation data (PXD006262) it truncates most pathways,
+which is precisely where the uncapped estimate is least trustworthy.
+
+**Validation obligations attached to this change:**
+1. Focused simulation re-run confirming the cap=3 operating point (type-I /
+   power) beyond the original 20 seeds.
+2. Real-data benchmark re-runs under the new default (scripts 05, 06, 10)
+   with all CSVs refreshed and parameters recorded.
+3. Documentation states the trade-off and the escape hatches
+   (`vif_cap = Inf`, `intergene = "none"`).
+
+**Predecessor decision.** The 2026-08-15 decision to default to
+`vif_cap = Inf` ("let users choose based on their rho distribution") is
+superseded: shipping a default that erases real-data signal pushes the
+calibration burden onto users who have not yet looked at their VIF
+distribution, which is the population that most needs a sane default.
 
 ## REM centering (added 2026-08-17, Round 2 fix)
 

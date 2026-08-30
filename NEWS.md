@@ -1,5 +1,20 @@
 # timeProtState 0.99.0
 
+## Behavior changes (2026-08-25)
+
+- `tps_calibrate_pathways()`: default `vif_cap` changed from `Inf` to
+  `3` (ADR 0010). The uncapped default erased nearly all real-data signal
+  (0 significant NET pathways on PXD006262; 0% dynamic trajectories on
+  PXD065583). Validated operating point (30 seeds, 200 perm): rho=0.2
+  type-I 0.023 / power 0.713; rho=0.5 type-I 0.073 / power 0.500
+  (vs 0.010/0.040 uncapped). Use `vif_cap = Inf` for maximal type-I
+  safety or `vif_cap = 1` to disable VIF scaling.
+- `tps_calibrate_dynamics()`: `q_dynamic` BH adjustment changed from
+  joint-across-conditions to per-condition families. The joint penalty
+  scaled with the number of conditions in the object, so a single-condition
+  negative-control arm appeared systematically more dynamic than a
+  many-condition arm purely from BH aggregation size.
+
 ## Implemented API
 
 - Data contract: `tps_import()`, `tps_validate()`, `tps_metadata_schema()`,

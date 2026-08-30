@@ -136,16 +136,20 @@
 #' @param intergene character; \code{"vif"} (default) applies the inter-gene
 #'   variance inflation, or \code{"none"} for the unadjusted permutation.
 #' @param vif_cap numeric; upper bound on the VIF to prevent over-correction
-#'   when pathway size is large and estimated rho is high (default \code{Inf},
-#'   no cap). The compound-symmetric VIF \code{1 + (k-1)*rho} grows linearly
-#'   with pathway size. Real proteomics data show highly variable VIF:
-#'   PXD065583 (human ASO) median VIF=1.66, only 12% of pathways exceed 3;
-#'   PXD006262 (yeast heat-shock) median VIF=5.43, 82% exceed 3. A cap of 3-4
-#'   is reasonable for datasets with moderate pathway correlation (rho < 0.1)
-#'   but will over-correct high-correlation data. Users should inspect the
-#'   \code{$vif} field and choose a cap based on their data's rho distribution.
-#'   Simulation (rho=0.5, k=10): cap=3 gives type-I 0.055 + power 0.590;
-#'   uncapped gives type-I 0.000 + power 0.060.
+#'   when pathway size is large and estimated rho is high (default \code{3}).
+#'   The compound-symmetric VIF \code{1 + (k-1)*rho} grows linearly with
+#'   pathway size and the residual-based rho estimate is noisy at proteomics
+#'   replicate counts, so an uncapped VIF can erase nearly all real-data
+#'   signal. The default cap of 3 is the validated type-I/power operating
+#'   point (simulation, rho=0.5, k=10: type-I 0.055, power 0.590; uncapped:
+#'   type-I 0.000, power 0.060; see ADR 0010). Set \code{vif_cap = Inf} to
+#'   disable the cap (maximal type-I safety, heavily conservative) or
+#'   \code{vif_cap = 1} to disable VIF scaling. Inspect the \code{$vif}
+#'   field to see your data's uncapped VIF distribution: low-correlation
+#'   data (e.g. PXD065583, median VIF 1.66) barely touches the cap, while
+#'   high-correlation data (e.g. PXD006262, median 5.43) is truncated for
+#'   most pathways — for such data also consider reporting
+#'   \code{intergene = "none"} alongside.
 #' @return a list of class \code{tps_pathway_calibrated} extending the input
 #'   with \code{p_net}, \code{p_rem}, \code{q_net}, \code{q_rem}, null summaries,
 #'   and (when \code{intergene = "vif"}) \code{intergene_cor} and \code{vif}.
@@ -166,7 +170,7 @@ tps_calibrate_pathways <- function(scores, abundance = NULL, n_perm = 1000L,
                                     n_bins = 4L, seed = 1L,
                                     correction = c("per_contrast","global"),
                                     intergene = c("vif", "none"),
-                                    vif_cap = Inf) {
+                                    vif_cap = 3) {
   mode <- match.arg(mode)
   correction <- match.arg(correction)
   intergene <- match.arg(intergene)
