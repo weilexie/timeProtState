@@ -83,6 +83,38 @@ Empirical analysis on real proteomics data shows highly variable VIF:
 Simulation (rho=0.5, k=10, 20 seeds, 200 perm): cap=3 gives type-I 0.055 +
 power 0.590; uncapped gives type-I 0.000 + power 0.060.
 
+### rho clipping-bias debias (added 2026-08-25)
+
+**Problem.** The per-pathway rho estimator clips at zero
+(`max(0, mean pairwise residual correlation)`). At true rho = 0 half the
+estimation noise mass is floored while the other half stays positive, so
+`E[rho_hat | rho = 0] > 0` (approximately +SE/2, ~0.03-0.05 at proteomics
+sample counts). The VIF multiplies this bias by (k-1), so independent data
+acquired a spurious median VIF of ~1.5 and EVERY pathway's observed
+departure was systematically shrunk. This was diagnosed as the dominant
+cause of the real-data discovery deficit on low-correlation data
+(PXD065583: 14-22 NET at q<0.05 vs CAMERA's 68-78, despite both methods
+having power 1.0 and controlled type-I at rho=0 in simulation).
+
+**Fix.** The bias floor is estimated directly from the data: draw 50
+size-matched random gene sets from the same residual matrix (membership
+permutation is exactly the null in question), compute each draw's mean
+pairwise rho, average per pathway size, and subtract:
+`rho_debiased = max(0, rho_pathway - floor(size))`. Fixed seed for
+reproducibility.
+
+**Validated outcome (30 seeds, 200 perm, cap=3):**
+
+| rho | type-I | power (before debias) | power (after) |
+|---|---|---|---|
+| 0 | 0.010 | (deficit existed only in the estimator bias) | 1.000 |
+| 0.2 | 0.023 | 0.713 | 0.747 |
+| 0.5 | 0.073 | 0.500 | 0.500 (floor negligible at rho 0.5) |
+
+**Real data:** PXD065583 NET q<0.05 rose from 14-22 to 44-51 per ASO
+(CAMERA 68-78; Jaccard 0.55-0.68, Spearman 0.92-0.94). PXD006262
+q<0.1 went 0 -> 2 with NET-vs-CAMERA Spearman 0.26 -> 0.83.
+
 ### Default changed from `Inf` to `3` (2026-08-25)
 
 **Decision.** `vif_cap = 3` is now the default. `vif_cap = Inf` remains

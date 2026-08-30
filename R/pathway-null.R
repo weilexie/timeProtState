@@ -62,7 +62,18 @@
 ## covariance that label permutation destroys. Do not estimate rho from
 ## moderated-t profiles: a shared pathway effect would be mistaken for
 ## noise correlation and the real NET would be over-corrected.
-.estimate_pathway_rho <- function(resid_mat, membership) {
+##
+## Clipping-bias debiasing (ADR 0010, 2026-08-25): the clipped estimator
+## max(0, mean pairwise rho) is positively biased at true rho = 0 — half
+## the estimation-noise mass is floored at 0 while the other half stays
+## positive, so E[rho_hat | rho = 0] > 0. With k members the bias is
+## amplified by (k-1) in the VIF, inflating every pathway's VIF above 1
+## even on independent data and systematically shrinking real signal.
+## The bias floor is estimated directly by drawing size-matched random
+## gene sets from the same residual matrix (permutation of membership is
+## exactly the null in question) and subtracted from each pathway's rho.
+.estimate_pathway_rho <- function(resid_mat, membership, n_floor_draws = 50L,
+                                   seed = 1L) {
   n_path <- nrow(membership)
   rho <- rep(0, n_path)
   if (is.null(resid_mat) || !is.matrix(resid_mat) ||
@@ -72,19 +83,47 @@
   if (nrow(resid_mat) != ncol(membership)) {
     return(rho)
   }
-  for (p in seq_len(n_path)) {
-    idx <- which(as.numeric(membership[p, ]) != 0)
-    if (length(idx) < 3L) next
+  .mean_pairwise_rho <- function(idx) {
     S <- resid_mat[idx, , drop = FALSE]
     keep <- apply(is.finite(S), 1L, function(r) sum(r) >= 4L)
     S <- S[keep, , drop = FALSE]
-    if (nrow(S) < 3L) next
+    if (nrow(S) < 3L) return(NA_real_)
     C <- suppressWarnings(stats::cor(t(S), use = "pairwise.complete.obs"))
     off <- C[upper.tri(C)]
     off <- off[is.finite(off)]
-    rho[p] <- if (length(off)) mean(off) else 0
+    if (length(off)) mean(off) else NA_real_
   }
-  pmax(0, pmin(rho, 0.99))
+  for (p in seq_len(n_path)) {
+    idx <- which(as.numeric(membership[p, ]) != 0)
+    if (length(idx) < 3L) next
+    r <- .mean_pairwise_rho(idx)
+    rho[p] <- if (is.finite(r)) r else 0
+  }
+  ## clipping-bias floor: mean rho over size-matched random sets
+  n_prot <- nrow(resid_mat)
+  sizes_raw <- as.integer(rowSums(as.matrix(membership != 0)))
+  floor_by_size <- list()
+  withr::with_seed(seed, {
+    for (p in seq_len(n_path)) {
+      k <- sizes_raw[p]
+      if (k < 3L || k >= n_prot) next
+      if (is.null(floor_by_size[[as.character(k)]])) {
+        draws <- vapply(seq_len(n_floor_draws), function(i) {
+          r <- .mean_pairwise_rho(sample.int(n_prot, k))
+          if (is.finite(r)) r else NA_real_
+        }, numeric(1L))
+        draws <- draws[is.finite(draws)]
+        floor_by_size[[as.character(k)]] <-
+          if (length(draws)) mean(draws) else 0
+      }
+    }
+  })
+  rho_deb <- vapply(seq_len(n_path), function(p) {
+    fl <- floor_by_size[[as.character(sizes_raw[p])]]
+    if (is.null(fl)) fl <- 0
+    max(0, rho[p] - fl)
+  }, numeric(1L))
+  pmax(0, pmin(rho_deb, 0.99))
 }
 
 .pathway_vif <- function(rho, sizes) {
@@ -293,7 +332,8 @@ tps_calibrate_pathways <- function(scores, abundance = NULL, n_perm = 1000L,
   ## vif_cap limits the VIF to prevent over-correction in large pathways
   ## with high estimated rho (the compound-symmetric VIF grows linearly
   ## with k, which can over-penalize real signal).
-  intergene_cor <- .estimate_pathway_rho(scores$residuals, M)
+  intergene_cor <- .estimate_pathway_rho(scores$residuals, M,
+                                         n_floor_draws = 50L, seed = seed)
   vif <- .pathway_vif(intergene_cor, sizes)
   if (!identical(intergene, "vif")) {
     intergene_cor[] <- 0

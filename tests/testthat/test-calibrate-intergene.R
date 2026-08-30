@@ -254,3 +254,45 @@ test_that("invalid vif_cap errors", {
   expect_error(tps_calibrate_pathways(pipe$pws, n_perm = 10, vif_cap = NA_real_),
                "vif_cap")
 })
+
+## ---- rho clipping-bias debias (2026-08-25) ---------------------------------
+test_that("independent residuals give VIF ~= 1 after debias", {
+  ## With truly independent residuals the clipped rho estimator is upward
+  ## biased; the random-set floor must remove that bias so median VIF ~ 1.
+  set.seed(11)
+  n_feat <- 120; n_samp <- 24
+  stat <- matrix(rnorm(n_feat * 3), nrow = n_feat,
+                 dimnames = list(paste0("P", 1:n_feat), NULL))
+  t2g <- data.frame(term = rep(paste0("pw", 1:10), each = 10),
+                    gene = paste0("P", 1:100), stringsAsFactors = FALSE)
+  resid_ind <- matrix(rnorm(n_feat * n_samp), nrow = n_feat)
+  dimnames(resid_ind) <- list(paste0("P", 1:n_feat), NULL)
+  pws <- tps_pathway_scores(stat, t2g, min_size = 5)
+  pws$residuals <- resid_ind[rownames(pws$statistic_matrix), ]
+  pc <- tps_calibrate_pathways(pws, mode = "unstratified", n_perm = 5,
+                               seed = 1, intergene = "vif")
+  expect_lt(stats::median(pc$vif), 1.10)
+  expect_true(all(pc$vif >= 1))
+})
+
+test_that("correlated residuals still inflate VIF after debias", {
+  set.seed(12)
+  n_feat <- 120; n_samp <- 24
+  stat <- matrix(rnorm(n_feat * 3), nrow = n_feat,
+                 dimnames = list(paste0("P", 1:n_feat), NULL))
+  t2g <- data.frame(term = rep(paste0("pw", 1:10), each = 10),
+                    gene = paste0("P", 1:100), stringsAsFactors = FALSE)
+  ## compound-symmetric rho = 0.5 within each 10-member block via factor model
+  eps <- matrix(rnorm(n_feat * n_samp), nrow = n_feat)
+  blk <- rep(1:12, each = 10)  # 12 blocks x 10 genes, one shared factor each
+  fac_by_block <- matrix(rnorm(12 * n_samp), nrow = 12)
+  Z <- fac_by_block[blk, ]    # n_feat x n_samp
+  resid_cor <- sqrt(0.5) * Z + sqrt(0.5) * eps
+  dimnames(resid_cor) <- list(paste0("P", 1:n_feat), NULL)
+  pws <- tps_pathway_scores(stat, t2g, min_size = 5)
+  pws$residuals <- resid_cor[rownames(pws$statistic_matrix), ]
+  pc <- tps_calibrate_pathways(pws, mode = "unstratified", n_perm = 5,
+                               seed = 1, intergene = "vif")
+  ## true rho 0.5 - floor(~0.05) -> VIF ~ 1 + 9*0.45 = 5.05, capped at 3
+  expect_gt(stats::median(pc$vif), 1.5)
+})

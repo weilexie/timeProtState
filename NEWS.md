@@ -9,6 +9,14 @@
   type-I 0.023 / power 0.713; rho=0.5 type-I 0.073 / power 0.500
   (vs 0.010/0.040 uncapped). Use `vif_cap = Inf` for maximal type-I
   safety or `vif_cap = 1` to disable VIF scaling.
+- `tps_calibrate_pathways()`: the per-pathway residual rho used by
+  `intergene = "vif"` is now debiased. The clipped estimator
+  `max(0, mean pairwise rho)` is upward-biased at true rho = 0, which
+  inflated every pathway's VIF above 1 even on independent data (ADR 0010,
+  2026-08-25). The bias floor is estimated from 50 size-matched random
+  gene sets drawn from the same residuals and subtracted. Simulation
+  (rho=0): power restored to 1.000 at type-I 0.010. PXD065583: NET q<0.05
+  44-51 per ASO (was 14-22), Jaccard vs CAMERA 0.55-0.68.
 - `tps_calibrate_dynamics()`: `q_dynamic` BH adjustment changed from
   joint-across-conditions to per-condition families. The joint penalty
   scaled with the number of conditions in the object, so a single-condition
