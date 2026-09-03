@@ -102,6 +102,8 @@
   prevent over-correction in large pathways with high estimated rho. Default
   `Inf` (no cap); empirical analysis shows cap=3 controls type-I to ~0.055
   while retaining ~59% power at rho=0.5, but the optimal cap is data-dependent.
+  (Superseded 2026-08-25: the default is now `3` — see "Behavior changes"
+  above.)
 
 ### Test improvements
 
