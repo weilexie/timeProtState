@@ -2,7 +2,7 @@
 ## Fit: limma moderated linear model + contrast testing
 ## ============================================================================
 ##
-## Implements STATISTICAL_CONTRACT.md section 2.4-2.6 and DECISIONS D1.
+## Implements STATISTICAL_CONTRACT.md and DECISIONS D1.
 ## The package default is trend = TRUE, robust = TRUE, applied UNIFORMLY to
 ## every limma fit (resolving the legacy 3-way inconsistency). The significance
 ## default is adj.P.Val < 0.05 with lfc_threshold = 0; the legacy_msm profile
@@ -37,6 +37,13 @@
 #' @return a list of class \code{tps_fit} with:
 #'   \item{statistics}{per-contrast (and per-family) result table.}
 #'   \item{fit}{the limma MArrayLM object.}
+#'   \item{expression}{numeric expression matrix used for the fit
+#'     (dimnames preserved).}
+#'   \item{block_value}{aligned block factor, or \code{NULL} when no block
+#'     is used.}
+#'   \item{design}{the \code{tps_design} object.}
+#'   \item{contrasts}{the \code{tps_contrasts} object.}
+#'   \item{residuals}{design residuals aligned to the assay.}
 #'   \item{thresholds}{the trend/robust settings plus optional
 #'     \code{block}, \code{correlation}, and \code{correlation_source}.}
 #'   \item{provenance}{provenance entry.}
@@ -189,6 +196,8 @@ tps_fit <- function(se, design, contrasts, assay_name = NULL,
     list(
       statistics = statistics,
       fit = fit_objs,
+      expression = expr,
+      block_value = block_value,
       thresholds = list(
         trend = trend, robust = robust, assay_name = assay_name,
         block = block_name, correlation = correlation_used,

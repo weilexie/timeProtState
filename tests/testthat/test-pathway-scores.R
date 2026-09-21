@@ -3,7 +3,7 @@
 ## Tests Goal 11 (tps_pathway_scores) and Goal 12 (tps_calibrate_pathways,
 ## tps_classify_pathways). Covers: membership construction, NET/REM/COH formula,
 ## size/coverage filtering, id_col mapping, permutation reproducibility,
-## null mode switching, and golden-master equivalence on real dormancy data.
+## null mode switching, and golden-master equivalence.
 
 library(testthat)
 library(timeProtState)
@@ -121,7 +121,7 @@ test_that("tps_calibrate_pathways returns empirical p-values in [0,1]", {
   pws <- tps_pathway_scores(fit, tps_example_term2gene,
                              id_col = "locus_tag", family = "endpoint")
   ave <- abundance_for(fit, pws)
-  pws_c <- tps_calibrate_pathways(pws, abundance = ave, n_perm = 100L,
+  pws_c <- tps_calibrate_pathways(engine = "permutation", pws, abundance = ave, n_perm = 100L,
                                    mode = "abundance_stratified", seed = 1L)
   expect_s3_class(pws_c, "tps_pathway_calibrated")
   expect_true(all(pws_c$p_net >= 0) && all(pws_c$p_net <= 1))
@@ -134,8 +134,8 @@ test_that("same seed reproduces p_net exactly (permutation determinism)", {
   pws <- tps_pathway_scores(fit, tps_example_term2gene,
                              id_col = "locus_tag", family = "endpoint")
   ave <- abundance_for(fit, pws)
-  c1 <- tps_calibrate_pathways(pws, abundance = ave, n_perm = 100L, seed = 42L)
-  c2 <- tps_calibrate_pathways(pws, abundance = ave, n_perm = 100L, seed = 42L)
+  c1 <- tps_calibrate_pathways(engine = "permutation", pws, abundance = ave, n_perm = 100L, seed = 42L)
+  c2 <- tps_calibrate_pathways(engine = "permutation", pws, abundance = ave, n_perm = 100L, seed = 42L)
   expect_identical(c1$p_net, c2$p_net)
   expect_identical(c1$p_rem, c2$p_rem)
 })
@@ -145,8 +145,8 @@ test_that("different seeds give different (but valid) p_net", {
   pws <- tps_pathway_scores(fit, tps_example_term2gene,
                              id_col = "locus_tag", family = "endpoint")
   ave <- abundance_for(fit, pws)
-  c1 <- tps_calibrate_pathways(pws, abundance = ave, n_perm = 100L, seed = 1L)
-  c2 <- tps_calibrate_pathways(pws, abundance = ave, n_perm = 100L, seed = 2L)
+  c1 <- tps_calibrate_pathways(engine = "permutation", pws, abundance = ave, n_perm = 100L, seed = 1L)
+  c2 <- tps_calibrate_pathways(engine = "permutation", pws, abundance = ave, n_perm = 100L, seed = 2L)
   ## not necessarily all different, but the matrices should not be identical
   expect_false(identical(c1$p_net, c2$p_net))
 })
@@ -155,7 +155,7 @@ test_that("unstratified mode works without abundance", {
   fit <- run_fit()
   pws <- tps_pathway_scores(fit, tps_example_term2gene,
                              id_col = "locus_tag", family = "endpoint")
-  pws_c <- tps_calibrate_pathways(pws, n_perm = 100L,
+  pws_c <- tps_calibrate_pathways(engine = "permutation", pws, n_perm = 100L,
                                    mode = "unstratified", seed = 1L)
   expect_true(all(pws_c$p_net >= 0) && all(pws_c$p_net <= 1))
 })
@@ -168,7 +168,7 @@ test_that("abundance_stratified errors without abundance for bare matrix", {
                     gene = rownames(m)[1:5],
                     stringsAsFactors = FALSE)
   pws <- tps_pathway_scores(m, t2g, min_size = 3)
-  expect_error(tps_calibrate_pathways(pws, n_perm = 5L,
+  expect_error(tps_calibrate_pathways(engine = "permutation", pws, n_perm = 5L,
                                        mode = "abundance_stratified"),
                "abundance_stratified.*abundance")
 })
@@ -179,7 +179,7 @@ test_that("abundance_stratified auto-detects AveExpr from fit", {
   pws <- tps_pathway_scores(fit, tps_example_term2gene,
                              id_col = "locus_tag", family = "endpoint")
   expect_false(is.null(pws$abundance))
-  pws_c <- tps_calibrate_pathways(pws, n_perm = 5L, seed = 1,
+  pws_c <- tps_calibrate_pathways(engine = "permutation", pws, n_perm = 5L, seed = 1,
                                    mode = "abundance_stratified")
   expect_true(all(pws_c$p_net >= 0 & pws_c$p_net <= 1))
 })
@@ -191,7 +191,7 @@ test_that("calibration does not perturb the global RNG state", {
   ave <- abundance_for(fit, pws)
   set.seed(123); before <- runif(5)
   set.seed(123)
-  tps_calibrate_pathways(pws, abundance = ave, n_perm = 50L, seed = 1L)
+  tps_calibrate_pathways(engine = "permutation", pws, abundance = ave, n_perm = 50L, seed = 1L)
   after <- runif(5)
   expect_equal(before, after)
 })
@@ -204,7 +204,7 @@ test_that("tps_classify_pathways returns a long state table", {
   pws <- tps_pathway_scores(fit, tps_example_term2gene,
                              id_col = "locus_tag", family = "endpoint")
   ave <- abundance_for(fit, pws)
-  pws_c <- tps_calibrate_pathways(pws, abundance = ave, n_perm = 100L, seed = 1L)
+  pws_c <- tps_calibrate_pathways(engine = "permutation", pws, abundance = ave, n_perm = 100L, seed = 1L)
   st <- tps_classify_pathways(pws_c)
   expect_true(is.data.frame(st))
   expect_equal(nrow(st), nrow(pws$scores$NET) * ncol(pws$scores$NET))
@@ -217,7 +217,7 @@ test_that("state labels are from the allowed vocabulary", {
   pws <- tps_pathway_scores(fit, tps_example_term2gene,
                              id_col = "locus_tag", family = "endpoint")
   ave <- abundance_for(fit, pws)
-  pws_c <- tps_calibrate_pathways(pws, abundance = ave, n_perm = 100L, seed = 1L)
+  pws_c <- tps_calibrate_pathways(engine = "permutation", pws, abundance = ave, n_perm = 100L, seed = 1L)
   st <- tps_classify_pathways(pws_c)
   allowed <- c("directional_up","directional_down","mixed_remodeling",
                "directional_with_internal_opposition","no_strong_state")
@@ -232,7 +232,7 @@ test_that("tps_classify_pathways errors on uncalibrated scores", {
 })
 
 ## ===========================================================================
-## Golden-master pathway equivalence (real dormancy data)
+## Golden-master pathway equivalence
 ## ===========================================================================
 test_that("golden_pathway: NET/REM/COH match oracle (tol 1e-10)", {
   g <- readRDS(testthat::test_path("fixtures", "golden_pathway.rds"))
@@ -257,7 +257,7 @@ test_that("golden_pathway: unstratified p_net matches oracle exactly (seed=1)", 
                                                      g$annotation$feature_id)]
   pws <- tps_pathway_scores(stat_m, g$term2gene,
                              type = "user_matrix", min_size = g$min_size)
-  pws_c <- tps_calibrate_pathways(pws, n_perm = g$n_perm,
+  pws_c <- tps_calibrate_pathways(engine = "permutation", pws, n_perm = g$n_perm,
                                    mode = "unstratified", seed = g$seed,
                                    intergene = "none")
   o <- match(g$pathway_terms, rownames(pws_c$p_net))
@@ -274,13 +274,13 @@ test_that("golden_pathway: p_rem is deterministic and in [0,1] (centered REM ora
                                                      g$annotation$feature_id)]
   pws <- tps_pathway_scores(stat_m, g$term2gene,
                              type = "user_matrix", min_size = g$min_size)
-  pws_c <- tps_calibrate_pathways(pws, n_perm = g$n_perm,
+  pws_c <- tps_calibrate_pathways(engine = "permutation", pws, n_perm = g$n_perm,
                                    mode = "unstratified", seed = g$seed,
                                    intergene = "none")
   pr <- pws_c$p_rem
   expect_true(all(pr >= 0 & pr <= 1))
   ## determinism: re-run with same seed, must match exactly
-  pws_c2 <- tps_calibrate_pathways(pws, n_perm = g$n_perm,
+  pws_c2 <- tps_calibrate_pathways(engine = "permutation", pws, n_perm = g$n_perm,
                                     mode = "unstratified", seed = g$seed,
                                     intergene = "none")
   expect_equal(pr, pws_c2$p_rem, tolerance = 0)
@@ -303,7 +303,7 @@ test_that("tps_calibrate_pathways works with n_perm = 1", {
   pws <- tps_pathway_scores(fit, tps_example_term2gene,
                              id_col = "locus_tag", family = "endpoint")
   ave <- abundance_for(fit, pws)
-  pws_c <- tps_calibrate_pathways(pws, abundance = ave, n_perm = 1L, seed = 1)
+  pws_c <- tps_calibrate_pathways(engine = "permutation", pws, abundance = ave, n_perm = 1L, seed = 1)
   expect_true(all(pws_c$p_net >= 0 & pws_c$p_net <= 1))
 })
 
@@ -353,7 +353,7 @@ test_that("tps_calibrate_pathways auto-detects abundance from scores", {
   pws <- tps_pathway_scores(fit, tps_example_term2gene,
                              id_col = "locus_tag", family = "endpoint")
   ## No abundance= passed; should use pws$abundance automatically
-  pws_c <- tps_calibrate_pathways(pws, n_perm = 5, seed = 1)
+  pws_c <- tps_calibrate_pathways(engine = "permutation", pws, n_perm = 5, seed = 1)
   expect_true(all(pws_c$p_net >= 0 & pws_c$p_net <= 1))
   expect_equal(pws_c$mode, "abundance_stratified")
 })

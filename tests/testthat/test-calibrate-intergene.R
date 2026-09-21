@@ -25,9 +25,9 @@ test_that("intergene='none' reproduces unadjusted p_net on a multi-contrast fit"
     conditions = c("A", "B"), times = c(1, 3, 7), n_replicates = 3,
     within_pathway_cor = 0, pathway_signal = "none", seed = 4)
   pipe <- .fit_endpoint(sim)
-  none <- tps_calibrate_pathways(pipe$pws, mode = "unstratified",
+  none <- tps_calibrate_pathways(engine = "permutation", pipe$pws, mode = "unstratified",
                                   n_perm = 40, seed = 1, intergene = "none")
-  vif0 <- tps_calibrate_pathways(pipe$pws, mode = "unstratified",
+  vif0 <- tps_calibrate_pathways(engine = "permutation", pipe$pws, mode = "unstratified",
                                   n_perm = 40, seed = 1, intergene = "vif")
   expect_equal(none$intergene, "none")
   expect_equal(vif0$intergene, "vif")
@@ -42,9 +42,9 @@ test_that("VIF shrinks anti-conservative NET calls at rho=0.5 versus none", {
     conditions = c("A", "B", "C"), times = c(1, 3, 7), n_replicates = 3,
     within_pathway_cor = 0.5, pathway_signal = "none", seed = 11)
   pipe <- .fit_endpoint(sim)
-  none <- tps_calibrate_pathways(pipe$pws, mode = "unstratified",
+  none <- tps_calibrate_pathways(engine = "permutation", pipe$pws, mode = "unstratified",
                                   n_perm = 80, seed = 1, intergene = "none")
-  adj <- tps_calibrate_pathways(pipe$pws, mode = "unstratified",
+  adj <- tps_calibrate_pathways(engine = "permutation", pipe$pws, mode = "unstratified",
                                  n_perm = 80, seed = 1, intergene = "vif")
   expect_gt(median(adj$intergene_cor), 0.15)
   expect_gt(median(adj$vif), 1.5)
@@ -60,7 +60,7 @@ test_that("VIF-adjusted NET type-I at rho=0.5 is below CAMERA directional", {
       conditions = c("A", "B"), times = c(1, 3, 7), n_replicates = 3,
       within_pathway_cor = 0.5, pathway_signal = "none", seed = 100L + s)
     pipe <- .fit_endpoint(sim)
-    adj <- tps_calibrate_pathways(pipe$pws, mode = "unstratified",
+    adj <- tps_calibrate_pathways(engine = "permutation", pipe$pws, mode = "unstratified",
                                    n_perm = 60, seed = 1, intergene = "vif")
     end_cols <- grepl("_t7_vs_baseline$", colnames(adj$p_net))
     tps_hits <- c(tps_hits, as.numeric(adj$p_net[, end_cols, drop = FALSE] < 0.05))
@@ -92,7 +92,7 @@ test_that("VIF still ranks a strong codirectional pathway below null pathways", 
     within_pathway_cor = 0.5, pathway_signal = "codirectional",
     signal_fraction = 0.5, amplitude = 3, seed = 3)
   pipe <- .fit_endpoint(sim)
-  adj <- tps_calibrate_pathways(pipe$pws, mode = "unstratified",
+  adj <- tps_calibrate_pathways(engine = "permutation", pipe$pws, mode = "unstratified",
                                  n_perm = 80, seed = 1, intergene = "vif")
   signal_pw <- sim$config$signal_pathways
   end_col <- grep("_t7_vs_baseline$", colnames(adj$p_net), value = TRUE)[1]
@@ -110,7 +110,7 @@ test_that("pathway size 3 gives VIF >= 1 and bounded", {
     conditions = c("A", "B"), times = c(1, 3), n_replicates = 3,
     within_pathway_cor = 0.5, pathway_signal = "none", seed = 5)
   pipe <- .fit_endpoint(sim)
-  adj <- tps_calibrate_pathways(pipe$pws, mode = "unstratified",
+  adj <- tps_calibrate_pathways(engine = "permutation", pipe$pws, mode = "unstratified",
                                  n_perm = 40, seed = 1, intergene = "vif")
   ## VIF = 1 + (k-1)*rho; with k=5, rho~0.5 → VIF ~3, but bounded by [1, 1+4*0.99]
   expect_true(all(adj$vif >= 1))
@@ -130,7 +130,7 @@ test_that("bare statistic matrix (no residuals) gives VIF = 1", {
     stringsAsFactors = FALSE)
   t2g <- t2g[t2g$gene %in% rownames(stat_mat), ]
   pws <- tps_pathway_scores(stat_mat, t2g)
-  adj <- tps_calibrate_pathways(pws, mode = "unstratified",
+  adj <- tps_calibrate_pathways(engine = "permutation", pws, mode = "unstratified",
                                  n_perm = 30, seed = 1, intergene = "vif")
   expect_true(all(adj$vif == 1))
   expect_true(all(adj$intergene_cor == 0))
@@ -147,7 +147,7 @@ test_that("REM type-I is controlled under VIF at rho=0.5 (multi-seed)", {
       conditions = c("A", "B"), times = c(1, 3, 7), n_replicates = 3,
       within_pathway_cor = 0.5, pathway_signal = "none", seed = s * 13)
     pipe <- .fit_endpoint(sim)
-    adj <- tps_calibrate_pathways(pipe$pws, mode = "unstratified",
+    adj <- tps_calibrate_pathways(engine = "permutation", pipe$pws, mode = "unstratified",
                                    n_perm = 100, seed = 1, intergene = "vif")
     end_col <- grep("_t7_vs_baseline$", colnames(adj$p_rem), value = TRUE)[1]
     typeI_rem[s] <- mean(adj$q_rem[, end_col] < 0.05, na.rm = TRUE)
@@ -168,9 +168,9 @@ test_that("golden-master: intergene='none' p_net is deterministic and reproducib
     within_pathway_cor = 0, pathway_signal = "none", seed = 4)
   pipe <- .fit_endpoint(sim)
   ## Two independent calls with same seed must give identical p_net
-  a <- tps_calibrate_pathways(pipe$pws, mode = "unstratified",
+  a <- tps_calibrate_pathways(engine = "permutation", pipe$pws, mode = "unstratified",
                                n_perm = 50, seed = 42, intergene = "none")
-  b <- tps_calibrate_pathways(pipe$pws, mode = "unstratified",
+  b <- tps_calibrate_pathways(engine = "permutation", pipe$pws, mode = "unstratified",
                                n_perm = 50, seed = 42, intergene = "none")
   expect_identical(a$p_net, b$p_net)
   expect_identical(a$p_rem, b$p_rem)
@@ -192,9 +192,9 @@ test_that("golden-master: at rho=0, 'none' and 'vif' give near-identical p_net",
     conditions = c("A", "B"), times = c(1, 3, 7), n_replicates = 3,
     within_pathway_cor = 0, pathway_signal = "none", seed = 4)
   pipe <- .fit_endpoint(sim)
-  none <- tps_calibrate_pathways(pipe$pws, mode = "unstratified",
+  none <- tps_calibrate_pathways(engine = "permutation", pipe$pws, mode = "unstratified",
                                   n_perm = 50, seed = 1, intergene = "none")
-  vif0 <- tps_calibrate_pathways(pipe$pws, mode = "unstratified",
+  vif0 <- tps_calibrate_pathways(engine = "permutation", pipe$pws, mode = "unstratified",
                                   n_perm = 50, seed = 1, intergene = "vif")
   ## At rho=0, VIF should be close to 1 (estimated from residuals)
   expect_true(all(vif0$vif >= 1))
@@ -211,10 +211,10 @@ test_that("vif_cap limits VIF and is recorded in output", {
     conditions = c("A", "B"), times = c(1, 3, 7), n_replicates = 3,
     within_pathway_cor = 0.5, pathway_signal = "none", seed = 3)
   pipe <- .fit_endpoint(sim)
-  uncapped <- tps_calibrate_pathways(pipe$pws, mode = "unstratified",
+  uncapped <- tps_calibrate_pathways(engine = "permutation", pipe$pws, mode = "unstratified",
                                       n_perm = 40, seed = 1, intergene = "vif",
                                       vif_cap = Inf)
-  capped <- tps_calibrate_pathways(pipe$pws, mode = "unstratified",
+  capped <- tps_calibrate_pathways(engine = "permutation", pipe$pws, mode = "unstratified",
                                     n_perm = 40, seed = 1, intergene = "vif",
                                     vif_cap = 3)
   ## Uncapped VIF may exceed 3 (k=10, rho~0.5 → VIF~5.5)
@@ -236,9 +236,9 @@ test_that("vif_cap=1 is equivalent to intergene='none'", {
     conditions = c("A", "B"), times = c(1, 3, 7), n_replicates = 3,
     within_pathway_cor = 0.5, pathway_signal = "none", seed = 4)
   pipe <- .fit_endpoint(sim)
-  none <- tps_calibrate_pathways(pipe$pws, mode = "unstratified",
+  none <- tps_calibrate_pathways(engine = "permutation", pipe$pws, mode = "unstratified",
                                   n_perm = 40, seed = 1, intergene = "none")
-  cap1 <- tps_calibrate_pathways(pipe$pws, mode = "unstratified",
+  cap1 <- tps_calibrate_pathways(engine = "permutation", pipe$pws, mode = "unstratified",
                                   n_perm = 40, seed = 1, intergene = "vif",
                                   vif_cap = 1)
   expect_equal(none$p_net, cap1$p_net, tolerance = 0)
@@ -249,9 +249,9 @@ test_that("invalid vif_cap errors", {
     n_pathways = 3, pathway_size = 5, n_background = 10,
     conditions = c("A"), times = c(1, 3), n_replicates = 2, seed = 1)
   pipe <- .fit_endpoint(sim)
-  expect_error(tps_calibrate_pathways(pipe$pws, n_perm = 10, vif_cap = 0.5),
+  expect_error(tps_calibrate_pathways(engine = "permutation", pipe$pws, n_perm = 10, vif_cap = 0.5),
                "vif_cap")
-  expect_error(tps_calibrate_pathways(pipe$pws, n_perm = 10, vif_cap = NA_real_),
+  expect_error(tps_calibrate_pathways(engine = "permutation", pipe$pws, n_perm = 10, vif_cap = NA_real_),
                "vif_cap")
 })
 
@@ -269,7 +269,7 @@ test_that("independent residuals give VIF ~= 1 after debias", {
   dimnames(resid_ind) <- list(paste0("P", 1:n_feat), NULL)
   pws <- tps_pathway_scores(stat, t2g, min_size = 5)
   pws$residuals <- resid_ind[rownames(pws$statistic_matrix), ]
-  pc <- tps_calibrate_pathways(pws, mode = "unstratified", n_perm = 5,
+  pc <- tps_calibrate_pathways(engine = "permutation", pws, mode = "unstratified", n_perm = 5,
                                seed = 1, intergene = "vif")
   expect_lt(stats::median(pc$vif), 1.10)
   expect_true(all(pc$vif >= 1))
@@ -291,7 +291,7 @@ test_that("correlated residuals still inflate VIF after debias", {
   dimnames(resid_cor) <- list(paste0("P", 1:n_feat), NULL)
   pws <- tps_pathway_scores(stat, t2g, min_size = 5)
   pws$residuals <- resid_cor[rownames(pws$statistic_matrix), ]
-  pc <- tps_calibrate_pathways(pws, mode = "unstratified", n_perm = 5,
+  pc <- tps_calibrate_pathways(engine = "permutation", pws, mode = "unstratified", n_perm = 5,
                                seed = 1, intergene = "vif")
   ## true rho 0.5 - floor(~0.05) -> VIF ~ 1 + 9*0.45 = 5.05, capped at 3
   expect_gt(stats::median(pc$vif), 1.5)

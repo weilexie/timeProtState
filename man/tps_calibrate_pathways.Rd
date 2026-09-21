@@ -2,7 +2,7 @@
 % Please edit documentation in R/pathway-null.R
 \name{tps_calibrate_pathways}
 \alias{tps_calibrate_pathways}
-\title{Calibrate pathway scores with a permutation null}
+\title{Calibrate pathway scores with CAMERA, ROMER, or a diagnostic permutation}
 \usage{
 tps_calibrate_pathways(
   scores,
@@ -13,7 +13,9 @@ tps_calibrate_pathways(
   seed = 1L,
   correction = c("per_contrast", "global"),
   intergene = c("vif", "none"),
-  vif_cap = 3
+  vif_cap = 3,
+  engine = c("auto", "camera", "romer", "fry", "permutation"),
+  nrot = 9999L
 )
 }
 \arguments{
@@ -23,71 +25,76 @@ tps_calibrate_pathways(
 \item{abundance}{numeric vector of per-feature abundance (e.g. AveExpr from
 limma), aligned to \code{scores$feature_ids}. A named vector is reordered
 when its names match either feature ids or mapped pathway ids. Required for
-\code{abundance_stratified} mode; ignored for \code{unstratified}.}
+permutation \code{abundance_stratified} mode; ignored otherwise.}
 
-\item{n_perm}{integer; number of permutations (default 1000; use 5000+ for
-publication).}
+\item{n_perm}{integer; number of permutations for
+\code{engine = "permutation"} (default 1000; use 5000+ for publication).}
 
 \item{mode}{character; \code{"abundance_stratified"} (default) or
-\code{"unstratified"}.}
+\code{"unstratified"}. Used only by the permutation engine.}
 
-\item{n_bins}{integer; abundance bins for stratified mode (default 4).}
+\item{n_bins}{integer; abundance bins for stratified permutation (default 4).}
 
 \item{seed}{integer; RNG seed (default 1). Uses a local RNG stream so the
-global state is not perturbed.}
+global state is not perturbed. Used by ROMER and the permutation engine.}
 
 \item{correction}{character; \code{"per_contrast"} (default) applies BH
 within each contrast, \code{"global"} applies BH across all
 pathway x contrast tests (more conservative for multi-timepoint designs).}
 
 \item{intergene}{character; \code{"vif"} (default) applies the inter-gene
-variance inflation, or \code{"none"} for the unadjusted permutation.}
+variance inflation, or \code{"none"} for the unadjusted permutation.
+Used only by the permutation engine.}
 
-\item{vif_cap}{numeric; upper bound on the VIF to prevent over-correction
-when pathway size is large and estimated rho is high (default \code{3}).
-The compound-symmetric VIF \code{1 + (k-1)*rho} grows linearly with
-pathway size and the residual-based rho estimate is noisy at proteomics
-replicate counts, so an uncapped VIF can erase nearly all real-data
-signal. The default cap of 3 is the validated type-I/power operating
-point (simulation, rho=0.5, k=10: type-I 0.055, power 0.590; uncapped:
-type-I 0.000, power 0.060; see ADR 0010). Set \code{vif_cap = Inf} to
-disable the cap (maximal type-I safety, heavily conservative) or
-\code{vif_cap = 1} to disable VIF scaling. Inspect the \code{$vif}
-field to see your data's uncapped VIF distribution: low-correlation
-data (e.g. PXD065583, median VIF 1.66) barely touches the cap, while
-high-correlation data (e.g. PXD006262, median 5.43) is truncated for
-most pathways — for such data also consider reporting
-\code{intergene = "none"} alongside.}
+\item{vif_cap}{numeric; upper bound on the VIF for the permutation engine
+(default \code{3}). See ADR 0010. Not used by CAMERA/ROMER/FRY.}
+
+\item{engine}{character; \code{"auto"} (default), \code{"camera"},
+\code{"romer"}, \code{"fry"}, or \code{"permutation"}.}
+
+\item{nrot}{integer; rotations for ROMER (default 9999).}
 }
 \value{
 a list of class \code{tps_pathway_calibrated} extending the input
-  with \code{p_net}, \code{p_rem}, \code{q_net}, \code{q_rem}, null summaries,
-  and (when \code{intergene = "vif"}) \code{intergene_cor} and \code{vif}.
+  with \code{p_directional}, \code{p_mixed}, \code{q_directional},
+  \code{q_mixed}, \code{engine_used}, and \code{null_type}. Permutation
+  also stores \code{p_net}/\code{p_rem} (aliased to the new names) and
+  null summaries. CAMERA/ROMER store the same aliases so downstream
+  code can read either naming scheme.
 }
 \description{
-Applies a size-matched permutation null to a \code{tps_pathway_scores}
-object and computes empirical p-values for NET (two-sided around its
-permutation-null mean) and REM (upper-tail on its non-negative excess over
-the permutation-null mean), Benjamini-Hochberg q-values, and null mean/SD
-per pathway.
+Applies a gene-set significance engine to a \code{tps_pathway_scores}
+object. The default \code{engine = "auto"} uses \code{\link[limma]{camera}}
+when no repeated-measures block is present and \code{\link[limma]{romer}}
+when \code{scores$block_value} is not \code{NULL} (ADR 0011). Explicit
+\code{engine = "camera"} aborts if a block is present. \code{engine = "romer"}
+is allowed with or without a block. \code{engine = "fry"} is a sensitivity
+engine. \code{engine = "permutation"} is the ADR 0010 diagnostic
+permutation+VIF path.
 }
 \details{
-The default mode is \code{"abundance_stratified"}: proteins are binned into
-\code{n_bins} equal-frequency abundance quantiles and permuted within each
-bin. One shared permutation index retains overlap among pathway definitions;
-stratification reduces differences in abundance distributions but does not
-preserve within-pathway protein covariance.
+NET, REM, and COH are summaries from \code{\link{tps_pathway_scores}} and
+are not recomputed here. Significance columns are \code{p_directional} /
+\code{q_directional} (net direction) and \code{p_mixed} / \code{q_mixed}
+(mixed remodeling). COH has no p-value.
 
-\code{intergene = "vif"} (the default) estimates each pathway's mean
-pairwise residual correlation across samples (after the group-means
-fit) and scales the observed NET / REM excess by \code{1/sqrt(VIF)}
-before the permutation comparison, with
-\code{VIF = 1 + (k - 1) * rho}. Residuals come from
-\code{\link{tps_fit}} via \code{\link{tps_pathway_scores}}. This is
-the competitive correction for member correlation that label
-permutation otherwise destroys (ADR 0010). \code{intergene = "none"}
-is the historical unadjusted permutation (ADR 0005). VIF is 1 when
-residuals are unavailable (for example a bare statistic matrix).
+CAMERA is called with \code{sort = FALSE}, \code{inter.gene.cor = NA}, and
+\code{trend.var} from the fit. Directional tests are parametric
+(\code{use.ranks = FALSE}); mixed tests use ranks. This function never
+calls \code{cameraPR}. ROMER uses \code{nrot} rotations with a local RNG
+stream (\code{seed}).
+
+Auto never switches engine because of missing values: the feature universe
+is formed once in \code{\link{tps_pathway_scores}}.
+
+The permutation engine remains available for diagnostics. Default
+\code{mode} is \code{"abundance_stratified"}: proteins are binned into
+\code{n_bins} equal-frequency abundance quantiles and permuted within each
+bin. \code{intergene = "vif"} estimates each pathway's mean pairwise
+residual correlation and scales the observed NET / REM excess by
+\code{1/sqrt(VIF)} before the permutation comparison, with
+\code{VIF = 1 + (k - 1) * rho}. Do not retune \code{vif_cap} for CAMERA
+or ROMER; it applies only to the permutation engine.
 }
 \examples{
 data(tps_example, package = "timeProtState")
@@ -98,6 +105,5 @@ contrasts <- tps_make_contrasts(design, endpoint = 7)
 fit <- tps_fit(se, design, contrasts)
 pws <- tps_pathway_scores(fit, tps_example_term2gene,
                            id_col = "locus_tag", family = "vs_baseline")
-ave <- rep(1, nrow(pws$statistic_matrix))
-pws_c <- tps_calibrate_pathways(pws, abundance = ave, n_perm = 10, seed = 1)
+pws_c <- tps_calibrate_pathways(pws, nrot = 99)
 }

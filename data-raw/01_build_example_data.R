@@ -1,9 +1,8 @@
 ## data-raw/build_example_data.R
 ##
 ## Generates the example datasets shipped with timeProtState. The design is
-## SYNTHETIC but mirrors the M. smegmatis dormancy structure audited in
-## STATISTICAL_CONTRACT.md: 3 conditions x 4 timepoints (shared day0 baseline)
-## x 3 replicates = 30 samples, ~200 proteins. No real data is included.
+## SYNTHETIC shared-baseline design: 3 conditions x times 1/3/7 plus shared
+## day-0, 3 replicates = 30 samples, ~200 proteins. No real data is included.
 ##
 ## This script is NOT run at check time; its outputs are committed under
 ## data/ (lazy-loaded) and inst/extdata/ (file-based for vignettes).
@@ -124,8 +123,9 @@ for (i in seq_len(n_prot)) {
   }
 }
 
-## inject ~5% MCAR missingness (NOT imputed; the package does not impute)
-miss_frac <- 0.05
+## miss_frac is 0 so the shipped example has ZERO missing values.
+## Missingness tests inject NA themselves.
+miss_frac <- 0
 miss_idx <- sample.int(length(expr), size = floor(miss_frac * length(expr)))
 expr[miss_idx] <- NA
 

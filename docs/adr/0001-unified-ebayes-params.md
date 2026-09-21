@@ -6,7 +6,7 @@
 
 ## Context
 
-The legacy M. smegmatis analysis used three different eBayes parameter sets:
+An earlier multi-script pipeline used three different eBayes parameter sets:
 - Main limma: trend=TRUE, robust=TRUE
 - TimeModel: trend=FALSE, robust=FALSE (defaults)
 - Pathway: trend=FALSE, robust=TRUE

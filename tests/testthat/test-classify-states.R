@@ -1,6 +1,6 @@
 ## test-classify-states.R
 ##
-## Tests the evidence-decomposed state classification (STATISTICAL_CONTRACT 6).
+## Tests the evidence-decomposed state classification (STATISTICAL_CONTRACT.md).
 ## Verifies the three axes are computed, the default rule uses FDR (D2),
 ## and the legacy_msm profile reproduces raw-P behavior.
 

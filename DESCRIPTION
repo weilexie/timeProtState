@@ -2,7 +2,7 @@ Package: timeProtState
 Type: Package
 Title: Contrast-Aware Pathway Remodeling Dynamics for Time-Course Proteomics
 Version: 0.99.0
-Date: 2026-08-25
+Date: 2026-09-21
 Authors@R: c(
     person(given = "Weile", family = "Xie",
            email = "weile.xie@outlook.com",
@@ -10,10 +10,12 @@ Authors@R: c(
 Description: Provides an auditable framework for shared-baseline,
     multi-condition time-course proteomics experiments. The package
     constructs estimable contrast families from a saturated group-means
-    design, decomposes protein-level temporal and condition-dependent
-    evidence into transparent axes, and computes permutation-calibrated
-    directional and remodeling pathway states. Optional repeated-measures
-    correlation is supported in the fit. Includes trajectory clustering,
+    design (shared-baseline contrast grammar), decomposes protein-level
+    temporal and condition-dependent evidence into transparent axes, and
+    reports pathway NET, REM, and COH summaries. Pathway significance
+    uses limma CAMERA for independent arrays or ROMER when a
+    repeat-measures block is set. Optional repeated-measures correlation
+    is supported in the fit. Includes trajectory clustering,
     correlated-pathway simulation for benchmarks, and structured export.
 License: Artistic-2.0 | file LICENSE
 Encoding: UTF-8
@@ -25,7 +27,7 @@ Imports:
     utils,
     SummarizedExperiment,
     S4Vectors,
-    limma,
+    limma (>= 3.64.0),
     Matrix,
     rlang,
     withr

@@ -2,8 +2,7 @@
 ## Plotting: diagnostic and result visualizations
 ## ============================================================================
 ##
-## Implements STATISTICAL_CONTRACT.md section 7 and Goal 13.
-## Principles (v2 spec section 13):
+## Plotting helpers.
 ##   - every plot function returns a ggplot object (composable, themeable)
 ##   - plot functions NEVER re-fit; they consume already-computed result objects
 ##   - color-blind friendly palettes
@@ -316,7 +315,7 @@ tps_plot_state_distribution <- function(states) {
 #'
 #' Produces a ggplot showing NET, REM, or COH for a single pathway across all
 #' timepoints and conditions, with significant timepoints marked using
-#' q_rem for REM and q_net for NET/COH. Requires the pathway scores to have been computed with
+#' q_mixed for REM and q_directional for NET/COH. Requires the pathway scores to have been computed with
 #' \code{family = "vs_baseline"} (all timepoints), not just endpoint.
 #'
 #' @param calibrated a \code{tps_pathway_calibrated} object.
@@ -376,8 +375,22 @@ tps_plot_pathway_trajectory <- function(calibrated, term,
     meta <- .parse_contrast_time_pub(contrast_names)
   }
   vals <- calibrated$scores[[metric]][term, ]
-  q_name <- if (identical(metric, "REM")) "q_rem" else "q_net"
-  qvals <- calibrated[[q_name]][term, ]
+  if (identical(metric, "REM")) {
+    q_name <- "q_mixed"
+    q_mat <- .q_mix(calibrated)
+  } else {
+    q_name <- "q_directional"
+    q_mat <- .q_dir(calibrated)
+  }
+  if (is.null(q_mat)) {
+    tps_abort("calibrated object is missing %s; run tps_calibrate_pathways first.",
+              q_name)
+  }
+  qvals <- if (!is.null(colnames(q_mat)) && !is.null(contrast_names)) {
+    q_mat[term, contrast_names]
+  } else {
+    q_mat[term, ]
+  }
   df <- data.frame(
     time = meta$time, condition = meta$condition,
     value = as.numeric(vals),

@@ -22,7 +22,7 @@ run_dynamics <- function(n_perm = 100L) {
   ave <- as.numeric(tapply(vsbl$AveExpr,
     factor(vsbl$feature_id, levels = rownames(pws$statistic_matrix)),
     function(x) x[1]))
-  pws_c <- tps_calibrate_pathways(pws, abundance = ave, n_perm = n_perm, seed = 1)
+  pws_c <- tps_calibrate_pathways(engine = "permutation", pws, abundance = ave, n_perm = n_perm, seed = 1)
   states <- tps_classify_states(fit)
   list(fit = fit, pws = pws, pws_c = pws_c, states = states)
 }
@@ -211,7 +211,7 @@ test_that("null calibration: complete null yields low false-positive dynamics", 
   ave <- as.numeric(tapply(vsbl$AveExpr,
     factor(vsbl$feature_id, levels = rownames(pws$statistic_matrix)),
     function(x) x[1]))
-  pws_c <- tps_calibrate_pathways(pws, abundance = ave, n_perm = 1000, seed = 1)
+  pws_c <- tps_calibrate_pathways(engine = "permutation", pws, abundance = ave, n_perm = 1000, seed = 1)
 
   ## (a) per-contrast false positive rate at q < 0.05 should be low (< 15%)
   fpr <- mean(pws_c$q_net < 0.05, na.rm = TRUE)
@@ -228,7 +228,7 @@ test_that("null calibration: complete null yields low false-positive dynamics", 
 ## ===========================================================================
 test_that("global correction produces valid q-values (more tests = more conservative on average)", {
   d <- run_dynamics()
-  pws_global <- tps_calibrate_pathways(d$pws, abundance = rep(1, nrow(d$pws$statistic_matrix)),
+  pws_global <- tps_calibrate_pathways(engine = "permutation", d$pws, abundance = rep(1, nrow(d$pws$statistic_matrix)),
                                         n_perm = 100, seed = 1,
                                         correction = "global")
   ## global BH over more tests should have >= mean q than per_contrast
@@ -326,7 +326,7 @@ test_that("injected early_directional effect is recovered with CORRECT label", {
   ave <- as.numeric(tapply(vsbl$AveExpr,
     factor(vsbl$feature_id, levels = rownames(pws$statistic_matrix)),
     function(x) x[1]))
-  pws_c <- tps_calibrate_pathways(pws, abundance = ave, n_perm = 500, seed = 1)
+  pws_c <- tps_calibrate_pathways(engine = "permutation", pws, abundance = ave, n_perm = 500, seed = 1)
   dyn <- tps_classify_pathway_dynamics(pws_c)
 
   ## pathway_A under Acid should be early_directional (exact label)
@@ -358,7 +358,7 @@ test_that("injected transient_burst is recovered with CORRECT label", {
   ave <- as.numeric(tapply(vsbl$AveExpr,
     factor(vsbl$feature_id, levels = rownames(pws$statistic_matrix)),
     function(x) x[1]))
-  pws_c <- tps_calibrate_pathways(pws, abundance = ave, n_perm = 500, seed = 1)
+  pws_c <- tps_calibrate_pathways(engine = "permutation", pws, abundance = ave, n_perm = 500, seed = 1)
   dyn <- tps_classify_pathway_dynamics(pws_c)
 
   burst <- dyn[dyn$term == "pw_burst", ]
@@ -390,7 +390,7 @@ test_that("injected gradual_remodeling is recovered with CORRECT label", {
   ave <- as.numeric(tapply(vsbl$AveExpr,
     factor(vsbl$feature_id, levels = rownames(pws$statistic_matrix)),
     function(x) x[1]))
-  pws_c <- tps_calibrate_pathways(pws, abundance = ave, n_perm = 500, seed = 1)
+  pws_c <- tps_calibrate_pathways(engine = "permutation", pws, abundance = ave, n_perm = 500, seed = 1)
   dyn <- tps_classify_pathway_dynamics(pws_c)
 
   grad <- dyn[dyn$term == "pw_grad", ]
@@ -420,7 +420,7 @@ test_that("injected delayed_opposition is recovered with CORRECT label", {
   ave <- as.numeric(tapply(vsbl$AveExpr,
     factor(vsbl$feature_id, levels = rownames(pws$statistic_matrix)),
     function(x) x[1]))
-  pws_c <- tps_calibrate_pathways(pws, abundance = ave, n_perm = 500, seed = 1)
+  pws_c <- tps_calibrate_pathways(engine = "permutation", pws, abundance = ave, n_perm = 500, seed = 1)
   dyn <- tps_classify_pathway_dynamics(pws_c)
 
   delay <- dyn[dyn$term == "pw_delay", ]
@@ -530,7 +530,7 @@ test_that("cheap shipped-example path still returns trajectory p-values", {
   t2g <- data.frame(term = "pw1", gene = rownames(sim$abundance)[1:4],
                     stringsAsFactors = FALSE)
   pws <- tps_pathway_scores(fit, t2g, family = "vs_baseline", min_size = 3)
-  pws_c <- tps_calibrate_pathways(pws, mode = "unstratified",
+  pws_c <- tps_calibrate_pathways(engine = "permutation", pws, mode = "unstratified",
                                   n_perm = 2, seed = 1)
   dyn_cal <- tps_calibrate_dynamics(pws_c, n_perm = 2, seed = 1)
   expect_true(all(c("p_dynamic", "q_dynamic", "dynamic_state") %in% names(dyn_cal)))
@@ -562,7 +562,7 @@ test_that("calibrate_dynamics null: complete null yields low false-positive rate
   ave <- as.numeric(tapply(vsbl$AveExpr,
     factor(vsbl$feature_id, levels = rownames(pws$statistic_matrix)),
     function(x) x[1]))
-  pws_c <- tps_calibrate_pathways(pws, abundance = ave, n_perm = 200, seed = 1)
+  pws_c <- tps_calibrate_pathways(engine = "permutation", pws, abundance = ave, n_perm = 200, seed = 1)
   dyn_cal <- tps_calibrate_dynamics(pws_c, n_perm = 100, seed = 1)
   ## under complete null, p_dynamic should have discrimination (not all identical)
   ## and most should be high (pathways rarely classified as non-null by chance)
@@ -593,7 +593,7 @@ test_that("calibrate_dynamics discrimination: injected effect has lower p_dynami
   ave <- as.numeric(tapply(vsbl$AveExpr,
     factor(vsbl$feature_id, levels = rownames(pws$statistic_matrix)),
     function(x) x[1]))
-  pws_c <- tps_calibrate_pathways(pws, abundance = ave, n_perm = 200, seed = 1)
+  pws_c <- tps_calibrate_pathways(engine = "permutation", pws, abundance = ave, n_perm = 200, seed = 1)
   dyn_cal <- tps_calibrate_dynamics(pws_c, n_perm = 100, seed = 1)
 
   ## the injected pathway under Acid should have LOWER p_dynamic than the

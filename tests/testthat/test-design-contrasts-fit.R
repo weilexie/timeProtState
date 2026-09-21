@@ -1,7 +1,7 @@
 ## test-design-contrasts-fit.R
 ##
 ## Tests the design/contrast/fit pipeline. The crown test is golden-master
-## equivalence against the legacy dormancy limma (STATISTICAL_CONTRACT 10):
+## equivalence against the frozen golden limma fixture:
 ## timeProtState's endpoint contrasts must reproduce legacy logFC/t/P within
 ## tolerance 1e-10 on the same 20-protein fixture.
 
@@ -120,13 +120,13 @@ test_that("tps_make_contrasts produces 6 full-rank families", {
   }
 })
 
-test_that("heterogeneity family span is reference-invariant (STATISTICAL_CONTRACT invariant 4)", {
+test_that("heterogeneity family span is reference-invariant (shared-baseline rank invariant)", {
   se <- tps_import(tps_example_abundance, tps_example_metadata)
   d <- tps_make_design(se)
   ## Changing the reference condition must span the SAME model-difference
   ## subspace: equal rank and equal column space. With feature-level missing
   ## values, contrasts.fit uses an approximate covariance transformation.
-  ## STATISTICAL_CONTRACT invariant 4 is therefore expressed as subspace
+  ## shared-baseline rank invariant is therefore expressed as subspace
   ## equivalence, which is the mathematically provable form.)
   c1 <- tps_make_contrasts(d, endpoint = 7, reference_condition = "Acid")
   c2 <- tps_make_contrasts(d, endpoint = 7, reference_condition = "Hypoxia")

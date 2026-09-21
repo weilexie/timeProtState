@@ -38,14 +38,14 @@ test_that("block fit runs through full pathway pipeline without error", {
     factor(tps_results(fit, "endpoint")$feature_id,
            levels = rownames(pws$statistic_matrix)),
     function(x) x[1]))
-  pws_c <- tps_calibrate_pathways(pws, abundance = ave, n_perm = 50,
+  pws_c <- tps_calibrate_pathways(engine = "permutation", pws, abundance = ave, n_perm = 50,
                                    seed = 1, intergene = "vif")
   expect_s3_class(pws_c, "tps_pathway_calibrated")
   expect_true(all(pws_c$vif >= 1))
   expect_true(all(pws_c$p_net >= 0 & pws_c$p_net <= 1))
 
   ## calibration with intergene="none" should also work
-  pws_none <- tps_calibrate_pathways(pws, abundance = ave, n_perm = 50,
+  pws_none <- tps_calibrate_pathways(engine = "permutation", pws, abundance = ave, n_perm = 50,
                                       seed = 1, intergene = "none")
   expect_true(all(pws_none$vif == 1))
 })
@@ -74,7 +74,7 @@ test_that("full 9-stage pipeline produces consistent results", {
     factor(tps_results(fit, "vs_baseline")$feature_id,
            levels = rownames(pws$statistic_matrix)),
     function(x) x[1]))
-  pws_c <- tps_calibrate_pathways(pws, abundance = ave, n_perm = 50, seed = 1)
+  pws_c <- tps_calibrate_pathways(engine = "permutation", pws, abundance = ave, n_perm = 50, seed = 1)
 
   ## both classifiers should work on the same calibrated object
   states <- tps_classify_pathways(pws_c)

@@ -201,7 +201,7 @@ test_that("simulation feeds tps_pathway_scores end-to-end", {
   fit <- tps_fit(se, design, contrasts)
   pws <- tps_pathway_scores(fit, sim$term2gene, family = "vs_baseline")
   ave <- rep(1, nrow(pws$statistic_matrix))
-  pws_c <- tps_calibrate_pathways(pws, abundance = ave, n_perm = 50, seed = 1)
+  pws_c <- tps_calibrate_pathways(engine = "permutation", pws, abundance = ave, n_perm = 50, seed = 1)
   expect_s3_class(pws_c, "tps_pathway_calibrated")
   expect_equal(nrow(pws_c$q_net), 5)
 })

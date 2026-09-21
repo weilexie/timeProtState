@@ -46,14 +46,34 @@
              stringsAsFactors = FALSE)
 }
 
+## Column contract (ADR 0011): calibrated objects carry q_directional /
+## q_mixed. Permutation-era aliases q_net / q_rem are accepted as fallbacks.
+.q_dir <- function(obj) {
+  if (!is.null(obj$q_directional)) obj$q_directional else obj$q_net
+}
+.q_mix <- function(obj) {
+  if (!is.null(obj$q_mixed)) obj$q_mixed else obj$q_rem
+}
+.p_dir <- function(obj) {
+  if (!is.null(obj$p_directional)) obj$p_directional else obj$p_net
+}
+.p_mix <- function(obj) {
+  if (!is.null(obj$p_mixed)) obj$p_mixed else obj$p_rem
+}
+.q_dir_long <- function(df) {
+  if ("q_directional" %in% names(df)) df$q_directional else df$q_net
+}
+
 ## ---- classify one pathway-condition trajectory -----------------------------
-## Given NET/REM/COH/q_net vectors ordered by time, classify the dynamic pattern.
-.classify_one_trajectory <- function(net, rem, coh, q_net, q_rem, alpha, coh_cut) {
+## Given NET/REM/COH/q_directional/q_mixed vectors ordered by time, classify
+## the dynamic pattern. Shape rules are descriptive; they read per-time q
+## values, not q_dynamic.
+.classify_one_trajectory <- function(net, rem, coh, q_dir, q_mix, alpha, coh_cut) {
   n <- length(net)
   if (n == 0L) return("no_dynamic_signal")
 
-  sig <- !is.na(q_net) & q_net < alpha
-  sig_rem <- !is.na(q_rem) & q_rem < alpha
+  sig <- !is.na(q_dir) & q_dir < alpha
+  sig_rem <- !is.na(q_mix) & q_mix < alpha
 
   if (!any(sig) && !any(sig_rem)) return("no_dynamic_signal")
 
@@ -120,29 +140,6 @@
   "no_dynamic_signal"
 }
 
-.dynamic_evidence_score <- function(net, rem, net_mean, net_sd,
-                                    rem_mean, rem_sd, meta, eps = 1e-12) {
-  net_z <- abs(net - net_mean) / pmax(net_sd, eps)
-  rem_z <- pmax(rem - rem_mean, 0) / pmax(rem_sd, eps)
-  net_z[net_sd < eps | !is.finite(net_z)] <- -Inf
-  rem_z[rem_sd < eps | !is.finite(rem_z)] <- -Inf
-  cell_score <- net_z
-  cell_score[] <- pmax(net_z, rem_z)
-
-  keys <- character(0)
-  values <- numeric(0)
-  for (i in seq_len(nrow(cell_score))) {
-    for (cc in unique(meta$condition)) {
-      idx <- which(meta$condition == cc)
-      score <- max(cell_score[i, idx], na.rm = TRUE)
-      if (!is.finite(score)) score <- 0
-      keys <- c(keys, paste(rownames(cell_score)[i], cc, sep = "##"))
-      values <- c(values, score)
-    }
-  }
-  setNames(values, keys)
-}
-
 ## ---- detect cross-condition divergence -------------------------------------
 ## For a pathway, check if conditions diverge in NET direction over time.
 ## Returns the COUNT of divergent timepoints (0 = no divergence).
@@ -153,7 +150,8 @@
   for (tt in unique(traj_long$time)) {
     if (is.na(tt)) next
     sub <- traj_long[traj_long$time == tt & !is.na(traj_long$time), , drop = FALSE]
-    sig <- sub[!is.na(sub$q_net) & sub$q_net < alpha, , drop = FALSE]
+    q_dir <- .q_dir_long(sub)
+    sig <- sub[!is.na(q_dir) & q_dir < alpha, , drop = FALSE]
     if (nrow(sig) >= 1L) {
       sig_signs <- sign(sig$NET)
       div_found <- FALSE
@@ -166,7 +164,7 @@
       ## non-significant condition with a non-trivial NET (magnitude floor
       ## prevents false positives from near-zero non-significant NETs)
       if (!div_found) {
-        nonsig <- sub[is.na(sub$q_net) | sub$q_net >= alpha, , drop = FALSE]
+        nonsig <- sub[is.na(q_dir) | q_dir >= alpha, , drop = FALSE]
         if (nrow(nonsig) > 0L) {
           if (any(sig_signs > 0) && any(nonsig$NET < -0.1, na.rm = TRUE))
             div_found <- TRUE
@@ -207,8 +205,9 @@
 #' are auditable (see the source of \code{.classify_one_trajectory}) and
 #' intended for exploratory trajectory interpretation, not as class-specific
 #' statistical inferences. Use \code{\link{tps_calibrate_dynamics}} for a
-#' trajectory-level significance test (\code{p_dynamic}/\code{q_dynamic});
-#' that test is independent of the shape label.
+#' trajectory-level Bonferroni-minP + global BH combination
+#' (\code{p_dynamic}/\code{q_dynamic}); that combination is not a shape
+#' test and is independent of the shape label.
 #'
 #' Cross-condition NET opposition is reported as the boolean column
 #' \code{is_divergent}, not as a \code{dynamic_state} label.
@@ -223,9 +222,10 @@
 #' @param alpha numeric; q-value threshold (default 0.05).
 #' @param coh_cut numeric; COH threshold for "directional" (default 0.5).
 #' @return a data.frame with columns: \code{term, condition, time, NET, REM,
-#'   COH, q_net, q_rem, dynamic_state} (long format, one row per
+#'   COH, q_directional, q_mixed, dynamic_state} (long format, one row per
 #'   pathway-condition-time), plus a summary column \code{is_divergent} marking
-#'   pathways where conditions diverge.
+#'   pathways where conditions diverge. Legacy aliases \code{q_net} and
+#'   \code{q_rem} duplicate \code{q_directional} and \code{q_mixed}.
 #'
 #' @examples
 #' data(tps_example, package = "timeProtState")
@@ -256,10 +256,37 @@ tps_classify_pathway_dynamics <- function(calibrated, alpha = 0.05, coh_cut = 0.
   NET <- calibrated$scores$NET
   REM <- calibrated$scores$REM
   COH <- calibrated$scores$COH
-  q_net <- calibrated$q_net
-  q_rem <- calibrated$q_rem
+  q_dir <- .q_dir(calibrated)
+  q_mix <- .q_mix(calibrated)
+  if (is.null(q_dir) || is.null(q_mix)) {
+    tps_abort(paste0(
+      "calibrated object is missing q_directional; ",
+      "run tps_calibrate_pathways first."
+    ))
+  }
   terms <- rownames(NET)
   contrasts <- colnames(NET)
+  if (is.null(colnames(q_dir)) || !all(contrasts %in% colnames(q_dir))) {
+    if (!is.null(calibrated$q_net) &&
+        all(contrasts %in% colnames(calibrated$q_net))) {
+      q_dir <- calibrated$q_net
+    }
+  }
+  if (is.null(colnames(q_mix)) || !all(contrasts %in% colnames(q_mix))) {
+    if (!is.null(calibrated$q_rem) &&
+        all(contrasts %in% colnames(calibrated$q_rem))) {
+      q_mix <- calibrated$q_rem
+    }
+  }
+  if (is.null(colnames(q_dir)) || !all(contrasts %in% colnames(q_dir)) ||
+      is.null(colnames(q_mix)) || !all(contrasts %in% colnames(q_mix))) {
+    tps_abort(paste0(
+      "Could not resolve timepoints from contrast metadata. Expected ",
+      "family='vs_baseline' (format '<condition>_t<time>_vs_baseline')."
+    ))
+  }
+  q_dir <- q_dir[terms, contrasts, drop = FALSE]
+  q_mix <- q_mix[terms, contrasts, drop = FALSE]
 
   ## parse time + condition from contrast names
   meta <- .contrast_meta(calibrated, contrasts)
@@ -286,14 +313,15 @@ tps_classify_pathway_dynamics <- function(calibrated, alpha = 0.05, coh_cut = 0.
       if (length(idx) == 0L) next
       dyn <- .classify_one_trajectory(
         net = NET[i, idx], rem = REM[i, idx], coh = COH[i, idx],
-        q_net = q_net[i, idx], q_rem = q_rem[i, idx],
+        q_dir = q_dir[i, idx], q_mix = q_mix[i, idx],
         alpha = alpha, coh_cut = coh_cut)
       for (k in seq_along(idx)) {
         j <- idx[k]
         rows[[length(rows) + 1L]] <- data.frame(
           term = terms[i], condition = cc, time = meta$time[j],
           NET = NET[i, j], REM = REM[i, j], COH = COH[i, j],
-          q_net = q_net[i, j], q_rem = q_rem[i, j],
+          q_directional = q_dir[i, j], q_mixed = q_mix[i, j],
+          q_net = q_dir[i, j], q_rem = q_mix[i, j],
           dynamic_state = dyn, stringsAsFactors = FALSE)
       }
     }
@@ -301,6 +329,7 @@ tps_classify_pathway_dynamics <- function(calibrated, alpha = 0.05, coh_cut = 0.
   long <- if (length(rows) > 0L) do.call(rbind, rows) else data.frame(
     term = character(0), condition = character(0), time = numeric(0),
     NET = numeric(0), REM = numeric(0), COH = numeric(0),
+    q_directional = numeric(0), q_mixed = numeric(0),
     q_net = numeric(0), q_rem = numeric(0),
     dynamic_state = character(0), stringsAsFactors = FALSE)
 
@@ -512,14 +541,12 @@ tps_link_states_pathways <- function(states, pathway_dynamics, term2gene,
 }
 
 ## ============================================================================
-## Permutation-calibrated dynamic states + divergence scoring
+## Trajectory p-values (Bonferroni-minP) + divergence scoring
 ## ============================================================================
 ##
-## This function generates a null distribution of dynamic trajectories by
-## permuting protein labels, then compares the
-## observed maximum standardized NET/REM evidence across time with its
-## permutation null. This calibrates trajectory-level departure while the
-## transparent rule system supplies the descriptive shape label.
+## p_dynamic is a Bonferroni-minP combination of per-timepoint p_directional
+## and p_mixed; q_dynamic is one global BH across pathway x condition.
+## Shape labels stay the descriptive rules on per-time q_directional/q_mixed.
 
 ## ---- divergence score (continuous, not just boolean) -----------------------
 .compute_divergence_score <- function(traj_long, alpha) {
@@ -533,11 +560,12 @@ tps_link_states_pathways <- function(states, pathway_dynamics, term2gene,
     if (is.na(tt)) next
     sub <- traj_long[traj_long$time == tt & !is.na(traj_long$time), , drop = FALSE]
     if (nrow(sub) < 2L) next
+    q_dir <- .q_dir_long(sub)
     for (i in seq_len(nrow(sub) - 1L)) {
       for (j in seq(i + 1L, nrow(sub))) {
         ## only count if at least one is significant
-        if (!is.na(sub$q_net[i]) && !is.na(sub$q_net[j])) {
-          if (sub$q_net[i] < alpha || sub$q_net[j] < alpha) {
+        if (!is.na(q_dir[i]) && !is.na(q_dir[j])) {
+          if (q_dir[i] < alpha || q_dir[j] < alpha) {
             div <- abs(sub$NET[i] - sub$NET[j])
             if (div > max_div) max_div <- div
           }
@@ -590,8 +618,11 @@ tps_divergence_score <- function(calibrated, dyn = NULL, alpha = 0.05) {
     tps_abort("alpha must be one finite value in (0,1).")
   }
   if (is.null(dyn)) dyn <- tps_classify_pathway_dynamics(calibrated, alpha = alpha)
+  has_q <- is.data.frame(dyn) &&
+    (("q_directional" %in% names(dyn)) || ("q_net" %in% names(dyn)))
   if (!is.data.frame(dyn) ||
-      !all(c("term", "condition", "time", "NET", "q_net") %in% names(dyn))) {
+      !all(c("term", "condition", "time", "NET") %in% names(dyn)) ||
+      !has_q) {
     tps_abort("dyn must be a pathway dynamics table.")
   }
   terms <- unique(dyn$term)
@@ -639,36 +670,37 @@ tps_divergence_score <- function(calibrated, dyn = NULL, alpha = 0.05) {
   result
 }
 
-## ---- permutation-calibrated dynamic states ---------------------------------
-#' Calibrate trajectory-level departure with a permutation null
+## ---- Bonferroni-minP trajectory p-values -----------------------------------
+#' Combine per-timepoint directional and mixed p-values into a trajectory p-value
 #'
-#' Permutes protein labels within the calibrated pathway score universe and
-#' compares each observed pathway-condition trajectory with the permutation
-#' distribution of its maximum standardized NET/REM evidence across time.
-#' This trajectory-level test accounts for searching across timepoints and
-#' both evidence components.
+#' For each pathway-condition trajectory, collects the per-timepoint
+#' \code{p_directional} and \code{p_mixed} values and applies a Bonferroni-minP
+#' combination: \code{p_traj = min(1, m * min(p_j))}, where \code{m} is the
+#' length of that p-value vector. \code{q_dynamic} is one global BH
+#' adjustment across all pathway-condition \code{p_traj} values (not a
+#' per-condition BH).
 #'
-#' \strong{Important}: \code{p_dynamic}/\code{q_dynamic} test whether the
-#' trajectory as a whole departs from the permutation null. They do NOT
-#' validate or certify a particular \code{dynamic_state} shape label. The
-#' shape label (from \code{\link{tps_classify_pathway_dynamics}}) is a
-#' rule-based descriptive phenotype; \code{q_dynamic} is an independent
-#' trajectory-level significance test. A pathway can have a significant
-#' \code{q_dynamic} with any shape label, or a non-significant
-#' \code{q_dynamic} with a non-trivial label — the two outputs answer
-#' different questions and must not be used to infer one from the other.
+#' This is \strong{not} a shape test. \code{p_dynamic}/\code{q_dynamic} flag
+#' whether any timepoint shows calibrated directional or mixed evidence;
+#' they do not certify a particular \code{dynamic_state} label. Shape labels
+#' remain the descriptive rules in \code{\link{tps_classify_pathway_dynamics}},
+#' which read per-time \code{q_directional}/\code{q_mixed} (not
+#' \code{q_dynamic}). Overlapping pathways share proteins, so
+#' \code{q_dynamic} should not be interpreted as a strict FDR among
+#' overlapping gene sets.
 #'
-#' @param calibrated a \code{tps_pathway_calibrated} object.
-#' @param n_perm integer; number of permutations for the null (default 500).
-#' @param alpha numeric; q-value threshold for dynamics (default 0.05).
-#' @param coh_cut numeric; COH threshold (default 0.5).
-#' @param seed integer; RNG seed.
-#' @return a data.frame with the original dynamics plus a column
-#'   \code{p_dynamic} (empirical trajectory-level p-value) and
-#'   \code{q_dynamic} (BH-adjusted within each condition: one multiplicity
-#'   family per condition across its pathways, so the penalty does not grow
-#'   with the number of conditions in the object; time is absorbed into the
-#'   max statistic).
+#' @param calibrated a \code{tps_pathway_calibrated} object from
+#'   \code{\link{tps_calibrate_pathways}}. Must contain \code{p_directional}
+#'   (or permutation alias \code{p_net}) and \code{p_mixed} (or \code{p_rem}).
+#' @param n_perm ignored; retained for backward compatibility. Trajectory
+#'   p-values are no longer permutation-based.
+#' @param alpha numeric; q-value threshold for the descriptive shape rules
+#'   (default 0.05). Does not enter \code{p_dynamic}.
+#' @param coh_cut numeric; COH threshold for shape rules (default 0.5).
+#' @param seed ignored; retained for backward compatibility.
+#' @return a data.frame with the original dynamics plus \code{p_dynamic}
+#'   (Bonferroni-minP of per-time directional and mixed p-values) and
+#'   \code{q_dynamic} (global BH across pathway x condition).
 #'
 #' @examples
 #' sim <- tps_simulate_timecourse(
@@ -683,7 +715,7 @@ tps_divergence_score <- function(calibrated, dyn = NULL, alpha = 0.05) {
 #' pws <- tps_pathway_scores(fit, t2g, family = "vs_baseline", min_size = 3)
 #' pws_c <- tps_calibrate_pathways(pws, mode = "unstratified",
 #'                                 n_perm = 2, seed = 1)
-#' dyn_cal <- tps_calibrate_dynamics(pws_c, n_perm = 2, seed = 1)
+#' dyn_cal <- tps_calibrate_dynamics(pws_c)
 #' nrow(dyn_cal)
 #' @export
 tps_calibrate_dynamics <- function(calibrated, n_perm = 500L, alpha = 0.05,
@@ -691,108 +723,65 @@ tps_calibrate_dynamics <- function(calibrated, n_perm = 500L, alpha = 0.05,
   if (!inherits(calibrated, "tps_pathway_calibrated")) {
     tps_abort("calibrated must be a tps_pathway_calibrated object.")
   }
-  if (!is.numeric(n_perm) || length(n_perm) != 1L || is.na(n_perm) ||
-      !is.finite(n_perm) || n_perm < 1L ||
-      n_perm != as.integer(n_perm)) {
-    tps_abort("n_perm must be one positive integer.")
+  ## n_perm and seed are ignored (no permutation loop). Kept in the signature
+  ## so existing callers do not error on unused arguments.
+  p_dir <- .p_dir(calibrated)
+  p_mix <- .p_mix(calibrated)
+  if (is.null(p_dir)) {
+    tps_abort(paste0(
+      "calibrated object is missing p_directional; ",
+      "run tps_calibrate_pathways first."
+    ))
   }
-  if (!is.numeric(seed) || length(seed) != 1L || is.na(seed) ||
-      !is.finite(seed)) {
-    tps_abort("seed must be one finite value.")
+  if (is.null(p_mix)) {
+    tps_abort(paste0(
+      "calibrated object is missing p_mixed; ",
+      "run tps_calibrate_pathways first."
+    ))
   }
 
-  ## get observed dynamics
+  ## Shape labels stay the descriptive per-time q_directional/q_mixed rules.
   dyn_obs <- tps_classify_pathway_dynamics(calibrated, alpha = alpha,
                                             coh_cut = coh_cut)
 
-  ## For each permutation: shuffle protein labels in the statistic matrix,
-  ## recompute NET/REM/COH, re-classify, count non-null.
-  stat_mat <- calibrated$statistic_matrix
-  M <- calibrated$membership
-  sizes <- calibrated$pathway_table$observed_size
-  n_prot <- nrow(stat_mat)
-  Mt <- as(M, "CsparseMatrix")
-  abs_stat <- abs(stat_mat)
-  eps <- 1e-12
-
-  ## Parent null summaries standardize NET and REM across pathways/contrasts.
-  net_null_mean <- calibrated$net_null_mean
-  net_null_sd <- calibrated$net_null_sd
-  rem_null_mean <- calibrated$rem_null_mean
-  rem_null_sd <- calibrated$rem_null_sd
-  ## Observed scores use the parent VIF so correlated members are not treated
-  ## as independent (ADR 0010). The permutation stream remains uncorrelated.
-  vif <- calibrated$vif
-  if (is.null(vif) || !identical(calibrated$intergene, "vif")) {
-    vif <- rep(1, nrow(calibrated$scores$NET))
-  }
-  vif_scale <- sqrt(pmax(as.numeric(vif), 1))
-  net_sd_obs <- sweep(net_null_sd, 1L, vif_scale, `*`)
-  rem_sd_obs <- sweep(rem_null_sd, 1L, vif_scale, `*`)
-  ## The observed statistic is the maximum standardized NET/REM departure over
-  ## time for each pathway-condition pair. The permutation maximum automatically
-  ## accounts for searching across timepoints and both evidence components.
-  meta <- .contrast_meta(calibrated, colnames(stat_mat))
+  contrasts <- colnames(calibrated$scores$NET)
+  terms <- rownames(calibrated$scores$NET)
+  p_dir <- p_dir[terms, contrasts, drop = FALSE]
+  p_mix <- p_mix[terms, contrasts, drop = FALSE]
+  meta <- .contrast_meta(calibrated, contrasts)
   if (anyNA(meta$time)) {
     tps_abort("Could not resolve every contrast as '<condition>_t<time>_vs_baseline' from metadata.")
   }
   if (any(grepl("^endpoint_", meta$condition))) {
     tps_abort("endpoint-family contrasts detected; use family='vs_baseline' in tps_pathway_scores.")
   }
-  observed_score <- .dynamic_evidence_score(
-    calibrated$scores$NET, calibrated$scores$REM,
-    net_null_mean, net_sd_obs, rem_null_mean, rem_sd_obs, meta, eps
-  )
-  null_count <- setNames(rep(0L, length(observed_score)), names(observed_score))
 
-  bin_list <- bin_template <- NULL
-  if (identical(calibrated$mode, "abundance_stratified")) {
-    bins <- calibrated$abundance_bins
-    if (is.null(bins) || length(bins) != n_prot) {
-      tps_abort("calibrated object lacks abundance bins required for dynamics null.")
+  ## Bonferroni-minP over p_directional and p_mixed at this condition's
+  ## timepoints; one p_traj per pathway x condition.
+  keys <- character(0)
+  p_traj <- numeric(0)
+  for (i in seq_along(terms)) {
+    for (cc in unique(meta$condition)) {
+      idx <- which(meta$condition == cc)
+      if (length(idx) == 0L) next
+      p_j <- c(as.numeric(p_dir[i, idx]), as.numeric(p_mix[i, idx]))
+      m <- length(p_j)
+      val <- if (!any(is.finite(p_j))) {
+        NA_real_
+      } else {
+        min(1, m * min(p_j, na.rm = TRUE))
+      }
+      keys <- c(keys, paste(terms[i], cc, sep = "##"))
+      p_traj <- c(p_traj, val)
     }
-    bin_list <- split(seq_len(n_prot), bins)
-    bin_template <- unlist(bin_list, use.names = FALSE)
   }
+  names(p_traj) <- keys
+  ## One global BH across all pathway x condition p_traj (not per-condition).
+  q_dyn <- stats::p.adjust(p_traj, method = "BH")
 
-  withr::with_seed(seed, {
-    for (b in seq_len(n_perm)) {
-      idx <- .perm_index(n_prot, calibrated$mode, bin_list, bin_template)
-      Tp <- stat_mat[idx, , drop = FALSE]
-      net_null <- as.matrix(Mt %*% Tp) / sizes
-      rem_null <- as.matrix(Mt %*% abs_stat[idx, , drop = FALSE]) / sizes
-      null_score <- .dynamic_evidence_score(
-        net_null, rem_null, net_null_mean, net_null_sd,
-        rem_null_mean, rem_null_sd, meta, eps
-      )
-      null_count <- null_count +
-        as.integer(null_score[names(observed_score)] >= observed_score - eps)
-    }
-  })
-
-  ## Empirical trajectory-level p-value per term-condition.
-  p_dynamic <- (null_count + 1) / (n_perm + 1)
-  ## BH adjustment is applied WITHIN each condition (one family per
-  ## condition, across its pathways). A joint BH across all
-  ## pathway-condition pairs makes the multiplicity penalty proportional to
-  ## the number of conditions in the object, so an analysis with fewer
-  ## conditions (e.g. a negative-control arm) would appear systematically
-  ## more "dynamic" than a many-condition arm purely from the BH
-  ## aggregation size — an arm-size artifact, not biology. Per-condition
-  ## families remove that asymmetry; each condition's family is the natural
-  ## unit (one question per condition: which pathways depart from the
-  ## trajectory null?).
-  q_dynamic <- p_dynamic
-  cond_of <- sub("^.*##", "", names(p_dynamic))
-  for (cc in unique(cond_of)) {
-    sel <- cond_of == cc
-    q_dynamic[sel] <- stats::p.adjust(p_dynamic[sel], method = "BH")
-  }
-
-  ## attach to observed dynamics (one p_dynamic per term-condition)
   dyn_obs$key <- paste(dyn_obs$term, dyn_obs$condition, sep = "##")
-  dyn_obs$p_dynamic <- p_dynamic[dyn_obs$key]
-  dyn_obs$q_dynamic <- q_dynamic[dyn_obs$key]
+  dyn_obs$p_dynamic <- unname(p_traj[dyn_obs$key])
+  dyn_obs$q_dynamic <- unname(q_dyn[dyn_obs$key])
   dyn_obs$key <- NULL
   ## preserve the classify_pathway_dynamics provenance from the internal call,
   ## then append the calibrate_dynamics entry (do not overwrite).
@@ -800,8 +789,10 @@ tps_calibrate_dynamics <- function(calibrated, n_perm = 500L, alpha = 0.05,
   attr(dyn_obs, "provenance") <- list(
     classify_pathway_dynamics = classify_prov,
     calibrate_dynamics = list(
-      stage = "calibrate_dynamics", n_perm = n_perm, alpha = alpha,
-      coh_cut = coh_cut, seed = seed,
+      stage = "calibrate_dynamics",
+      method = "bonferroni_minp_global_bh",
+      n_perm = n_perm, seed = seed, ignored = c("n_perm", "seed"),
+      alpha = alpha, coh_cut = coh_cut,
       timestamp = format(Sys.time(), "%Y-%m-%dT%H:%M:%S%z"),
       package_version = as.character(getNamespaceVersion("timeProtState"))))
   dyn_obs

@@ -2,7 +2,7 @@
 ## Design: saturated group-means model for shared-baseline time-course
 ## ============================================================================
 ##
-## Implements STATISTICAL_CONTRACT.md section 5.1. The design is a no-intercept
+## Implements STATISTICAL_CONTRACT.md The design is a no-intercept
 ## cell-means model: X = model.matrix(~ 0 + group). In a shared-baseline design
 ## the baseline (day0) collapses to a single "baseline" cell shared across all
 ## conditions; otherwise each condition x time combination forms its own cell.

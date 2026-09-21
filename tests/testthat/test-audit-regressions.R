@@ -129,7 +129,7 @@ test_that("pathway membership is numeric and single-contrast calibration stays m
                     gene = paste0("g", 1:8))
   expect_no_warning(scores <- tps_pathway_scores(stat, t2g, min_size = 2))
   expect_s4_class(scores$membership, "dgCMatrix")
-  cal <- tps_calibrate_pathways(scores, mode = "unstratified",
+  cal <- tps_calibrate_pathways(engine = "permutation", scores, mode = "unstratified",
                                 n_perm = 10, seed = 1)
   expect_equal(dim(cal$q_net), c(2L, 1L))
   expect_equal(dim(cal$q_rem), c(2L, 1L))
@@ -141,7 +141,7 @@ test_that("two-sided NET calibration is centered on the permutation null", {
   t2g <- data.frame(term = rep(c("high", "low"), each = 4),
                     gene = paste0("g", 1:8))
   scores <- tps_pathway_scores(stat, t2g, min_size = 2)
-  cal <- tps_calibrate_pathways(scores, mode = "unstratified",
+  cal <- tps_calibrate_pathways(engine = "permutation", scores, mode = "unstratified",
                                 n_perm = 100, seed = 9)
   expect_equal(unname(cal$p_net["high", ]), unname(cal$p_net["low", ]))
 })

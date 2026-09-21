@@ -1,6 +1,11 @@
 *.Rcheck/
 *.tar.gz
 .Rproj.user/
+.Rhistory
+.RData
+.Ruserdata
+.DS_Store
+Thumbs.db
 vignettes/*.html
 vignettes/*.R
 inst/doc/

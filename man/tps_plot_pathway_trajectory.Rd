@@ -26,7 +26,7 @@ a ggplot object with underlying data attached as attribute \code{"data"}.
 \description{
 Produces a ggplot showing NET, REM, or COH for a single pathway across all
 timepoints and conditions, with significant timepoints marked using
-q_rem for REM and q_net for NET/COH. Requires the pathway scores to have been computed with
+q_mixed for REM and q_directional for NET/COH. Requires the pathway scores to have been computed with
 \code{family = "vs_baseline"} (all timepoints), not just endpoint.
 }
 \examples{

@@ -15,12 +15,16 @@ It provides:
 - **Evidence-decomposed protein states**: temporal,
   condition-heterogeneity, and direction axes combined into auditable
   state labels.
-- **Permutation-calibrated pathway states**: NET (net direction), REM
-  (remodeling magnitude), COH (coherence), with an abundance-stratified
-  null and a default inter-gene VIF adjustment for member correlation.
+- **Pathway summaries and significance**: NET (net direction), REM
+  (remodeling magnitude), and COH (coherence) are summaries. Default
+  `engine = "auto"` tests pathways with limma CAMERA (independent
+  arrays) or ROMER (when a repeat-measures block is set). Reported
+  columns are `p_directional` / `p_mixed`. Permutation+VIF is a
+  diagnostic engine; `vif_cap` is not retuned.
 - **Optional repeated measures**: `tps_fit(block, correlation)` passes a
   subject block to `limma::lmFit`; the consensus correlation is estimated
   with `limma::duplicateCorrelation()` when `correlation` is omitted.
+  A block also switches pathway significance from CAMERA to ROMER.
 - **Correlated-pathway simulation**: `tps_simulate_correlated_pathways()`
   generates known-truth data with compound-symmetric within-pathway
   correlation for type-I / power checks.
@@ -30,6 +34,7 @@ It provides:
 ``` r
 # From a local clone/source directory:
 # remotes::install_local(".")
+# remotes::install_github("ORG/timeProtState")  # fill after the public repo exists
 ```
 
 ## Quick start
@@ -44,12 +49,17 @@ design <- tps_make_design(se)
 contrasts <- tps_make_contrasts(design, endpoint = 7)
 fit <- tps_fit(se, design, contrasts)
 states <- tps_classify_states(fit)
-states
+
+pws <- tps_pathway_scores(fit, tps_example_term2gene,
+                          id_col = "locus_tag", family = "vs_baseline")
+pws_c <- tps_calibrate_pathways(pws)
+tps_classify_pathways(pws_c)
 ```
 
 When the same biological unit is followed over time, pass `block` (a
-`colData` column or a sample-aligned vector). The package does not treat
-a column named `replicate` as a block by default.
+`colData` column or a sample-aligned vector). Pathway significance then
+uses ROMER instead of CAMERA (`engine = "auto"`). The package does not
+treat a column named `replicate` as a block by default.
 
 ``` r
 ## Only when subject_id identifies the SAME biological unit over time.
@@ -65,14 +75,18 @@ Package examples and tests use the synthetic `tps_example` object (200
 features × 30 samples). The publication benchmarks use only public data and
 known-truth simulation:
 
-- PXD006262 (single-condition longitudinal) —
-  `scripts/05_PXD006262_closest_longitudinal.R`
-- PXD065583 (multi-condition shared baseline) —
-  `scripts/06_PXD065583_ASO_benchmark.R`
-- correlated-pathway simulation —
-  `scripts/04_simulation_correlation_benchmark.R`
-- trajectory recovery —
-  `scripts/07_trajectory_recovery_benchmark.R`
+- complete-null CAMERA/ROMER calibration —
+  `scripts/01_engine_null_calibration.R`
+- CAMERA/ROMER power —
+  `scripts/02_engine_power.R`
+- PXD065583 (multi-condition shared baseline; CAMERA, no block) —
+  `scripts/03_PXD065583_three_contrasts.R`
+- PXD005703 (donor block → ROMER) —
+  `scripts/04_PXD005703_romer.R`
+- PXD065583 universe thresholds —
+  `scripts/05_PXD065583_universe_thresholds.R`
+- permutation+VIF diagnostic —
+  `scripts/06_permutation_vif_diagnostic.R`
 
 These benchmark scripts belong to the manuscript reproducibility bundle and
 are not distributed inside this standalone package repository. The accessions

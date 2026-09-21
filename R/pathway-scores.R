@@ -2,9 +2,11 @@
 ## Pathway scores: NET / REM / COH (deterministic, no permutation)
 ## ============================================================================
 ##
-## Implements STATISTICAL_CONTRACT.md section 8.1-8.3 and DECISIONS D5.
-## This is the deterministic scoring layer (Goal 11). Permutation calibration
-## lives in pathway-null.R (Goal 12).
+## Implements STATISTICAL_CONTRACT.md, DECISIONS D5, and ADR 0011.
+## This is the deterministic scoring layer (Goal 11). Competitive gene-set
+## tests (CAMERA/ROMER) and the diagnostic permutation engine live in
+## pathway-null.R (Goal 12). NET/REM/COH are summaries, not the significance
+## test; do not recompute them in tps_calibrate_pathways.
 ##
 ## For pathway g and contrast j, with protein-level statistic s_{i,j}:
 ##   NET[g,j] = sum_i M[g,i] * s[i,j] / size[g]      (net direction)
@@ -60,14 +62,27 @@
   M
 }
 
+## Integer row indices into the feature universe (expression / statistic
+## matrix rows). CAMERA/ROMER/FRY take this named list, not character ids.
+.index_from_membership <- function(M) {
+  n_path <- nrow(M)
+  out <- vector("list", n_path)
+  names(out) <- rownames(M)
+  if (n_path < 1L) return(out)
+  for (p in seq_len(n_path)) {
+    out[[p]] <- as.integer(which(as.numeric(M[p, ]) != 0))
+  }
+  out
+}
+
 ## ---- tps_pathway_scores ----------------------------------------------------
 #' Compute deterministic pathway NET/REM/COH scores
 #'
 #' Computes the directional net (NET), remodeling magnitude (REM), and
 #' directional coherence (COH) for each pathway x contrast, from a moderated
 #' statistic matrix (default: moderated t from \code{\link{tps_fit}}). This is
-#' the deterministic layer; permutation calibration is applied separately via
-#' \code{\link{tps_calibrate_pathways}}.
+#' the deterministic layer. Significance is applied separately via
+#' \code{\link{tps_calibrate_pathways}} (CAMERA/ROMER by default; ADR 0011).
 #'
 #' The scores are: \code{NET = mean(t)}, \code{REM = mean(|t|)},
 #' \code{COH = |NET| / (REM + eps)}. COH is a magnitude-weighted coherence
@@ -100,15 +115,28 @@
 #'   Ignored if a matrix is supplied.
 #' @param id_col character; if feature ids in the fit come from a rowData column
 #'   (e.g. locus tags) rather than row names, name that column. If \code{NULL},
-#'   row names of the statistic matrix are used.
+#'   row names of the statistic matrix are used. Mapping is used only for
+#'   \code{term2gene} membership; expression and statistic rownames stay
+#'   feature ids.
 #' @param min_size integer; minimum observed pathway size to retain.
 #' @param min_coverage numeric in [0,1]; minimum library coverage
 #'   (observed/library) to retain. Default 0 (no coverage filter beyond size).
 #' @return a list of class \code{tps_pathway_scores} with:
 #'   \item{scores}{list with NET, REM, COH matrices (pathways x contrasts).}
 #'   \item{membership}{the sparse membership matrix (with size attributes).}
+#'   \item{index}{named list of integer row indices into \code{expression}
+#'     (and the statistic matrix) for each retained pathway.}
 #'   \item{pathway_table}{per-pathway size/coverage audit.}
 #'   \item{statistic_type}{the statistic used.}
+#'   \item{expression}{expression matrix for CAMERA/ROMER, or \code{NULL}
+#'     when \code{fit} is a bare statistic matrix.}
+#'   \item{design_matrix}{design matrix from the fit, or \code{NULL}.}
+#'   \item{contrast_matrix}{contrast matrix for the selected family, or
+#'     \code{NULL}.}
+#'   \item{n_dropped_stat_na}{features dropped for a non-finite statistic
+#'     on any selected contrast.}
+#'   \item{n_dropped_expr_na}{features dropped for incomplete expression
+#'     on inference samples.}
 #'   \item{provenance}{provenance entry.}
 #'
 #' @examples
@@ -150,13 +178,20 @@ tps_pathway_scores <- function(fit, term2gene, type = "moderated_t",
   ## obtain statistic matrix
   pathway_ids <- NULL
   residual_mat <- NULL
+  expr <- NULL
+  design_matrix <- NULL
+  contrast_matrix <- NULL
+  block_value <- NULL
+  correlation <- NULL
+  trend <- NULL
+  family_used <- family
   if (inherits(fit, "tps_fit")) {
     ## T01/B5: family=NULL pools every single-contrast (t) family. In a
     ## shared-baseline design, endpoint is algebraically a subset of
     ## vs_baseline at the endpoint timepoint, so pooling double-counts the
     ## same contrast in NET/REM. Require an explicit family when more than
     ## one t-family is present.
-    if (is.null(family)) {
+    if (is.null(family_used)) {
       ct <- fit$contrasts$contrast_table
       t_families <- if (is.data.frame(ct) && "test" %in% names(ct) &&
                         "family" %in% names(ct)) {
@@ -174,12 +209,29 @@ tps_pathway_scores <- function(fit, term2gene, type = "moderated_t",
       if (length(t_families) == 0L) {
         tps_abort("fit has no single-contrast (t) families to score.")
       }
+      family_used <- t_families[[1L]]
     }
-    stat_mat <- tps_statistic_matrix(fit, type = type, family = family)
+    stat_mat <- tps_statistic_matrix(fit, type = type, family = family_used)
     if (!is.null(fit$residuals)) {
       residual_mat <- fit$residuals
     }
-    ## if id_col given, remap rownames via the annotation carried by the fit
+    ## Copy slots needed by CAMERA/ROMER. A bare matrix never gets these.
+    expr <- fit$expression
+    if (!is.null(fit$design) && !is.null(fit$design$design_matrix)) {
+      design_matrix <- fit$design$design_matrix
+    }
+    block_value <- fit$block_value
+    if (!is.null(fit$thresholds)) {
+      correlation <- fit$thresholds$correlation
+      trend <- fit$thresholds$trend
+    }
+    if (!is.null(fit$contrasts) && is.list(fit$contrasts$families) &&
+        !is.null(family_used) &&
+        family_used %in% names(fit$contrasts$families)) {
+      contrast_matrix <- fit$contrasts$families[[family_used]]
+    }
+    ## if id_col given, remap membership ids via the annotation. Do not
+    ## rename expression or statistic rownames (those stay feature ids).
     if (!is.null(id_col)) {
       ann <- fit$annotation
       ## annotation rownames align with stat_mat rownames (both = feature ids)
@@ -190,7 +242,7 @@ tps_pathway_scores <- function(fit, term2gene, type = "moderated_t",
       if (!id_col %in% names(ann)) {
         tps_abort("annotation has no column '%s'.", id_col)
       }
-      ## ann rownames == stat_mat rownames; remap
+      ## ann rownames == stat_mat rownames; remap membership ids only
       new_ids <- ann[[id_col]][match(rownames(stat_mat), rownames(ann))]
       new_ids <- as.character(new_ids)
       unmapped <- is.na(new_ids)
@@ -238,24 +290,85 @@ tps_pathway_scores <- function(fit, term2gene, type = "moderated_t",
   }
   if (is.null(pathway_ids)) pathway_ids <- feature_ids
 
-  ## Keep one common, finite feature universe across all contrasts. Treating an
-  ## unestimable statistic as zero would silently turn missing evidence into a
-  ## null effect and dilute pathway scores.
-  finite_rows <- apply(is.finite(stat_mat), 1L, all)
-  dropped_nonfinite <- feature_ids[!finite_rows]
-  stat_mat <- stat_mat[finite_rows, , drop = FALSE]
-  pathway_ids <- pathway_ids[finite_rows]
+  if (!is.null(contrast_matrix) && !is.null(colnames(stat_mat))) {
+    if (is.null(colnames(contrast_matrix)) ||
+        !all(colnames(stat_mat) %in% colnames(contrast_matrix))) {
+      contrast_matrix <- NULL
+    } else {
+      contrast_matrix <- contrast_matrix[, colnames(stat_mat), drop = FALSE]
+    }
+  }
+
+  ## Align expression to statistic rows (feature ids) and design samples.
+  ## Inference samples are the rows of design_matrix / columns of expression.
+  if (!is.null(expr)) {
+    if (is.null(rownames(expr))) {
+      tps_abort("fit$expression must have row names (feature ids).")
+    }
+    if (!all(feature_ids %in% rownames(expr))) {
+      tps_abort("fit$expression is missing features present in the statistic matrix.")
+    }
+    expr <- expr[feature_ids, , drop = FALSE]
+    if (!is.null(design_matrix)) {
+      sample_ids <- rownames(design_matrix)
+      if (!is.null(sample_ids)) {
+        if (is.null(colnames(expr))) {
+          tps_abort("fit$expression must have column names (sample ids).")
+        }
+        missing_s <- setdiff(sample_ids, colnames(expr))
+        if (length(missing_s)) {
+          tps_abort("fit$expression is missing design samples (e.g. '%s').",
+                    missing_s[[1L]])
+        }
+        if (!is.null(block_value) && length(block_value) == ncol(expr) &&
+            is.null(names(block_value))) {
+          names(block_value) <- colnames(expr)
+        }
+        expr <- expr[, sample_ids, drop = FALSE]
+        if (!is.null(block_value) && !is.null(names(block_value))) {
+          block_value <- block_value[sample_ids]
+        }
+      } else if (ncol(expr) != nrow(design_matrix)) {
+        tps_abort("expression columns (%d) != design rows (%d).",
+                  ncol(expr), nrow(design_matrix))
+      }
+    }
+  }
+
+  ## Universe once: finite statistics on every selected contrast AND complete
+  ## expression on every inference sample. Do not recode missing evidence as 0.
+  ## Missingness must not change the calibration engine (ADR 0011).
+  stat_ok <- apply(is.finite(stat_mat), 1L, all)
+  expr_ok <- if (is.null(expr)) {
+    rep(TRUE, length(stat_ok))
+  } else {
+    apply(expr, 1L, function(r) all(is.finite(r)))
+  }
+  n_input_features <- length(feature_ids)
+  n_dropped_stat_na <- as.integer(sum(!stat_ok))
+  n_dropped_expr_na <- as.integer(sum(!expr_ok))
+  dropped_nonfinite <- feature_ids[!stat_ok]
+  keep <- stat_ok & expr_ok
+  stat_mat <- stat_mat[keep, , drop = FALSE]
+  pathway_ids <- pathway_ids[keep]
+  if (!is.null(expr)) {
+    expr <- expr[keep, , drop = FALSE]
+  }
   if (!is.null(residual_mat)) {
-    rid <- feature_ids[finite_rows]
+    rid <- feature_ids[keep]
     if (!is.matrix(residual_mat) || !all(rid %in% rownames(residual_mat))) {
       residual_mat <- NULL
     } else {
       residual_mat <- residual_mat[rid, , drop = FALSE]
     }
   }
+  feature_ids <- if (!is.null(expr)) rownames(expr) else rownames(stat_mat)
   universe <- pathway_ids
   if (length(universe) == 0L) {
-    tps_abort("statistic matrix has no features finite across all selected contrasts.")
+    tps_abort(paste0(
+      "no features remain after requiring finite statistics on all selected ",
+      "contrasts and complete expression on inference samples."
+    ))
   }
 
   ## T03/M2: carry AveExpr from the fit so tps_calibrate_pathways can derive
@@ -300,6 +413,7 @@ tps_pathway_scores <- function(fit, term2gene, type = "moderated_t",
                      paste(head(unique(term2gene$gene), 3), collapse = ", "), "."))
   }
 
+  index <- .index_from_membership(M)
   sizes <- obs_size
   Mt <- as(M, "CsparseMatrix")
   NET <- as.matrix(Mt %*% stat_mat) / sizes
@@ -318,7 +432,7 @@ tps_pathway_scores <- function(fit, term2gene, type = "moderated_t",
   attrition <- data.frame(
     step = c("input_features", "nonfinite_dropped", "in_universe",
              "pathways_in_term2gene", "pathways_after_filters"),
-    count = c(length(feature_ids),
+    count = c(n_input_features,
              length(dropped_nonfinite),
              length(universe),
              length(unique(as.character(term2gene$term))),
@@ -334,11 +448,11 @@ tps_pathway_scores <- function(fit, term2gene, type = "moderated_t",
       is.data.frame(fit$contrasts$contrast_table)) {
     ct <- fit$contrasts$contrast_table
     keep_t <- ct$test == "t"
-    if (is.null(family)) {
+    if (is.null(family_used)) {
       ## T01 guard already ensured exactly one t-family; use it.
       cm_sub <- ct[keep_t, , drop = FALSE]
     } else {
-      cm_sub <- ct[keep_t & ct$family == family, , drop = FALSE]
+      cm_sub <- ct[keep_t & ct$family == family_used, , drop = FALSE]
     }
     ## align row order to stat_mat columns
     cm_sub <- cm_sub[match(colnames(stat_mat), cm_sub$contrast), ,
@@ -354,16 +468,25 @@ tps_pathway_scores <- function(fit, term2gene, type = "moderated_t",
     list(
       scores = list(NET = NET, REM = REM, COH = COH),
       membership = M,
+      index = index,
       pathway_table = pathway_table,
       statistic_matrix = stat_mat,
       residuals = residual_mat,
       statistic_type = type,
       contrast_meta = contrast_meta,
       universe = universe,
-      feature_ids = rownames(stat_mat),
-      id_mapping = data.frame(feature_id = rownames(stat_mat),
+      feature_ids = feature_ids,
+      id_mapping = data.frame(feature_id = feature_ids,
                               pathway_id = pathway_ids,
                               stringsAsFactors = FALSE),
+      expression = expr,
+      design_matrix = design_matrix,
+      contrast_matrix = contrast_matrix,
+      block_value = block_value,
+      correlation = correlation,
+      trend = trend,
+      n_dropped_stat_na = n_dropped_stat_na,
+      n_dropped_expr_na = n_dropped_expr_na,
       min_size = min_size,
       min_coverage = min_coverage,
       abundance = ave_expr,
@@ -400,6 +523,10 @@ print.tps_pathway_scores <- function(x, ...) {
   if (length(x$dropped_features_nonfinite)) {
     cat(sprintf("  features dropped (non-finite statistic): %d\n",
                 length(x$dropped_features_nonfinite)))
+  }
+  if (!is.null(x$n_dropped_expr_na) && isTRUE(x$n_dropped_expr_na > 0L)) {
+    cat(sprintf("  features dropped (incomplete expression): %d\n",
+                as.integer(x$n_dropped_expr_na)))
   }
   invisible(x)
 }

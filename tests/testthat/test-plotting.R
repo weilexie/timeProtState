@@ -1,6 +1,6 @@
 ## test-plotting.R
 ##
-## Tests Goal 13: plotting functions. Verifies each returns a ggplot object
+## Plotting functions return a ggplot object
 ## (composable), carries extractable data, and does not re-fit.
 
 library(testthat)
@@ -114,7 +114,7 @@ test_that("tps_plot_pathway_states returns a ggplot", {
                             factor(tps_results(p$fit,"endpoint")$feature_id,
                                    levels = rownames(pws$statistic_matrix)),
                             function(x) x[1]))
-  pws_c <- tps_calibrate_pathways(pws, abundance = ave, n_perm = 50L, seed = 1L)
+  pws_c <- tps_calibrate_pathways(engine = "permutation", pws, abundance = ave, n_perm = 50L, seed = 1L)
   pwstates <- tps_classify_pathways(pws_c)
   plt <- tps_plot_pathway_states(pwstates)
   expect_true(ggplot2::is_ggplot(plt))
@@ -142,7 +142,7 @@ test_that("tps_plot_pathway_trajectory renders vs_baseline calibrated object", {
     factor(tps_results(fit, "vs_baseline")$feature_id,
            levels = rownames(pws$statistic_matrix)),
     function(x) x[1]))
-  pws_c <- tps_calibrate_pathways(pws, abundance = ave, n_perm = 50, seed = 1)
+  pws_c <- tps_calibrate_pathways(engine = "permutation", pws, abundance = ave, n_perm = 50, seed = 1)
   p <- tps_plot_pathway_trajectory(pws_c, term = rownames(pws_c$scores$NET)[1])
   expect_true(ggplot2::is_ggplot(p))
   expect_true(nrow(p$data) > 0)
@@ -165,7 +165,7 @@ test_that("tps_plot_pathway_trajectory handles endpoint family prefix", {
     factor(tps_results(fit, "endpoint")$feature_id,
            levels = rownames(pws$statistic_matrix)),
     function(x) x[1]))
-  pws_c <- tps_calibrate_pathways(pws, abundance = ave, n_perm = 50, seed = 1)
+  pws_c <- tps_calibrate_pathways(engine = "permutation", pws, abundance = ave, n_perm = 50, seed = 1)
   p <- tps_plot_pathway_trajectory(pws_c, term = rownames(pws_c$scores$NET)[1])
   expect_true(ggplot2::is_ggplot(p))
   ## endpoint_ prefix must be stripped — condition should NOT start with "endpoint_"

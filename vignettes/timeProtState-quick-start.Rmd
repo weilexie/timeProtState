@@ -29,8 +29,8 @@ proteomics** experiments. It converts a protein-level abundance matrix into:
    (the shared baseline is modeled once, not copied per condition).
 2. **Transparent protein dynamic states** decomposed into temporal,
    condition-heterogeneity, and direction evidence axes.
-3. **Permutation-calibrated pathway directional/remodeling states**
-   (NET / REM / COH), with an abundance-stratified null.
+3. **Pathway NET / REM / COH summaries** with CAMERA (independent
+   arrays) or ROMER (when a repeat-measures block is set) significance.
 
 This vignette walks through the full pipeline on a small synthetic example.
 
@@ -92,7 +92,8 @@ When the same biological subject is followed across time points (for example,
 a longitudinal heat-shock series with individuals A-D sampled at every time
 point), pass a `block` argument so `limma::lmFit` accounts for within-subject
 correlation. The consensus correlation is estimated with
-`limma::duplicateCorrelation()` when `correlation` is left `NULL`:
+`limma::duplicateCorrelation()` when `correlation` is left `NULL`. The same
+`block` switches default pathway significance from CAMERA to ROMER:
 
 ```{r block, eval = FALSE}
 ## Only when 'subject_id' identifies the SAME biological unit over time.
@@ -121,21 +122,15 @@ cl
 The key methodological feature: pathway scores can be computed for **all
 timepoints** (not just the endpoint) by passing `family = "vs_baseline"`.
 This yields NET/REM/COH trajectories that show how each pathway remodels
-over time.
+over time. Default significance is `engine = "auto"` (CAMERA without a
+block, ROMER when a block is set); `n_perm` is not required.
 
 ```{r pathway}
 ## Use vs_baseline to get all timepoints (contrast-driven dynamics)
 pws <- tps_pathway_scores(fit, tps_example_term2gene,
                           id_col = "locus_tag", family = "vs_baseline")
-ave <- as.numeric(tapply(
-  tps_results(fit, "vs_baseline")$AveExpr,
-  factor(tps_results(fit, "vs_baseline")$feature_id,
-         levels = rownames(pws$statistic_matrix)),
-  function(x) x[1]
-))
-## The default intergene = "vif" applies inter-gene VIF adjustment; use
-## intergene = "none" for the historical unadjusted permutation.
-pws_c <- tps_calibrate_pathways(pws, abundance = ave, n_perm = 200, seed = 1)
+pws_c <- tps_calibrate_pathways(pws)
+tps_classify_pathways(pws_c)
 
 ## Classify pathway remodeling dynamics across the time course
 ## These are rule-based trajectory shape labels (descriptive phenotypes,
@@ -145,10 +140,10 @@ dyn <- tps_classify_pathway_dynamics(pws_c)
 head(dyn)
 table(dyn$dynamic_state)
 
-## For a trajectory-level significance test (independent of the shape label),
-## use tps_calibrate_dynamics(). q_dynamic tests whether the trajectory as a
-## whole departs from the permutation null; it does not validate any label.
-## dyn_cal <- tps_calibrate_dynamics(pws_c, n_perm = 200, seed = 1)
+## Trajectory-level q_dynamic is Bonferroni-minP of per-timepoint
+## directional and mixed p-values, then BH over pathway × condition.
+## It is not a permutation test and does not validate a shape label.
+## dyn_cal <- tps_calibrate_dynamics(pws_c)
 
 ## Single-pathway trajectory plot (NET over time, by condition)
 ## tps_plot_pathway_trajectory(pws_c, term = rownames(pws_c$scores$NET)[1])

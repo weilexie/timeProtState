@@ -2,7 +2,7 @@
 ## Import: build a SummarizedExperiment from a protein x sample matrix + metadata
 ## ============================================================================
 ##
-## Design contract: STATISTICAL_CONTRACT.md section 4. The import function is
+## Design contract: STATISTICAL_CONTRACT.md The import function is
 ## the ONLY entry point that constructs the working object. It enforces:
 ##   - numeric abundance matrix
 ##   - unique protein ids

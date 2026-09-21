@@ -42,6 +42,13 @@ correlation is estimated from the data.}
 a list of class \code{tps_fit} with:
   \item{statistics}{per-contrast (and per-family) result table.}
   \item{fit}{the limma MArrayLM object.}
+  \item{expression}{numeric expression matrix used for the fit
+    (dimnames preserved).}
+  \item{block_value}{aligned block factor, or \code{NULL} when no block
+    is used.}
+  \item{design}{the \code{tps_design} object.}
+  \item{contrasts}{the \code{tps_contrasts} object.}
+  \item{residuals}{design residuals aligned to the assay.}
   \item{thresholds}{the trend/robust settings plus optional
     \code{block}, \code{correlation}, and \code{correlation_source}.}
   \item{provenance}{provenance entry.}

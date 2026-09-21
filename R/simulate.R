@@ -2,7 +2,7 @@
 ## Simulate time-course proteomics for benchmarking
 ## ============================================================================
 ##
-## Implements STATISTICAL_CONTRACT.md section 9 and Goal 15.
+## Implements STATISTICAL_CONTRACT.md.
 ## Generates synthetic shared-baseline time-course proteomics with known truth,
 ## for type-I error, power, FDR, and state-recovery benchmarks.
 ##
@@ -445,7 +445,7 @@ tps_inject_pathway_effect <- function(sim, term2gene, term,
 ## pathway protein correlation (compound symmetric via a one-factor model).
 ##
 ## This directly tests the core calibration risk flagged in
-## STATISTICAL_CONTRACT.md / STATUS section 7: the abundance-stratified
+## STATISTICAL_CONTRACT.md: the abundance-stratified
 ## permutation null in tps_calibrate_pathways breaks within-pathway protein
 ## correlation, so when the true data have positive within-pathway correlation
 ## the observed NET/REM are inflated relative to the permutation null,

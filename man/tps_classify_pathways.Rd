@@ -17,13 +17,17 @@ remodeling (default 0.5).}
 }
 \value{
 a data.frame (long format) with one row per pathway x contrast:
-  term, contrast, size, NET, REM, COH, q_net, q_rem, state.
+  term, contrast, size, NET, REM, COH, q_directional, q_mixed, state.
+  \code{q_net} and \code{q_rem} are aliases of \code{q_directional} and
+  \code{q_mixed} for one release.
 }
 \description{
 Assigns each pathway x contrast a state label from a calibrated
 \code{tps_pathway_calibrated} object: \code{directional_up},
 \code{directional_down}, \code{mixed_remodeling},
 \code{directional_with_internal_opposition}, or \code{no_strong_state}.
+Labels use CAMERA/ROMER (or permutation) q-values
+\code{q_directional} and \code{q_mixed}.
 }
 \examples{
 data(tps_example, package = "timeProtState")
@@ -34,7 +38,6 @@ contrasts <- tps_make_contrasts(design, endpoint = 7)
 fit <- tps_fit(se, design, contrasts)
 pws <- tps_pathway_scores(fit, tps_example_term2gene,
                            id_col = "locus_tag", family = "vs_baseline")
-ave <- rep(1, nrow(pws$statistic_matrix))
-pws_c <- tps_calibrate_pathways(pws, abundance = ave, n_perm = 10, seed = 1)
+pws_c <- tps_calibrate_pathways(pws, nrot = 99)
 tps_classify_pathways(pws_c)
 }

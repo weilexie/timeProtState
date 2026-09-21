@@ -1,6 +1,6 @@
 ## test-simulate-export.R
 ##
-## Tests Goal 15 (simulate) and Goal 14/export. The simulator must be
+## Simulator and export tests. The simulator must be
 ## reproducible, respect the shared-baseline structure, inject missingness,
 ## and produce a usable SE via tps_import for the full pipeline.
 

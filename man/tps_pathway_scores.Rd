@@ -35,7 +35,9 @@ Ignored if a matrix is supplied.}
 
 \item{id_col}{character; if feature ids in the fit come from a rowData column
 (e.g. locus tags) rather than row names, name that column. If \code{NULL},
-row names of the statistic matrix are used.}
+row names of the statistic matrix are used. Mapping is used only for
+\code{term2gene} membership; expression and statistic rownames stay
+feature ids.}
 
 \item{min_size}{integer; minimum observed pathway size to retain.}
 
@@ -46,16 +48,27 @@ row names of the statistic matrix are used.}
 a list of class \code{tps_pathway_scores} with:
   \item{scores}{list with NET, REM, COH matrices (pathways x contrasts).}
   \item{membership}{the sparse membership matrix (with size attributes).}
+  \item{index}{named list of integer row indices into \code{expression}
+    (and the statistic matrix) for each retained pathway.}
   \item{pathway_table}{per-pathway size/coverage audit.}
   \item{statistic_type}{the statistic used.}
+  \item{expression}{expression matrix for CAMERA/ROMER, or \code{NULL}
+    when \code{fit} is a bare statistic matrix.}
+  \item{design_matrix}{design matrix from the fit, or \code{NULL}.}
+  \item{contrast_matrix}{contrast matrix for the selected family, or
+    \code{NULL}.}
+  \item{n_dropped_stat_na}{features dropped for a non-finite statistic
+    on any selected contrast.}
+  \item{n_dropped_expr_na}{features dropped for incomplete expression
+    on inference samples.}
   \item{provenance}{provenance entry.}
 }
 \description{
 Computes the directional net (NET), remodeling magnitude (REM), and
 directional coherence (COH) for each pathway x contrast, from a moderated
 statistic matrix (default: moderated t from \code{\link{tps_fit}}). This is
-the deterministic layer; permutation calibration is applied separately via
-\code{\link{tps_calibrate_pathways}}.
+the deterministic layer. Significance is applied separately via
+\code{\link{tps_calibrate_pathways}} (CAMERA/ROMER by default; ADR 0011).
 }
 \details{
 The scores are: \code{NET = mean(t)}, \code{REM = mean(|t|)},

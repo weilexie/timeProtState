@@ -2,7 +2,7 @@
 ## Classify states: evidence-decomposed protein dynamic states
 ## ============================================================================
 ##
-## Implements STATISTICAL_CONTRACT.md section 6. The classification NEVER
+## Implements STATISTICAL_CONTRACT.md The classification NEVER
 ## collapses to a black box first. It computes three transparent evidence axes:
 ##   1. temporal_evidence    (from average_time / within_omnibus families)
 ##   2. condition_heterogeneity (from heterogeneity family)

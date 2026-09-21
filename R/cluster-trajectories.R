@@ -2,7 +2,7 @@
 ## Cluster trajectories: Mfuzz adapter (soft) + kmeans alternative (hard)
 ## ============================================================================
 ##
-## Implements STATISTICAL_CONTRACT.md section 7.2-7.3 and DECISIONS D6.
+## Implements STATISTICAL_CONTRACT.md and DECISIONS D6.
 ## Clustering is NOT a novelty of the package (legacy already used Mfuzz);
 ## it is an adapter. The key fix: clustering operates on the UNIQUE-CELL
 ## trajectory matrix (baseline once), not the legacy 3x-copied display matrix.

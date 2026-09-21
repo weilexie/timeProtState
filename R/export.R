@@ -33,9 +33,9 @@
 #' fit <- tps_fit(se, design, contrasts)
 #' pws <- tps_pathway_scores(fit, tps_example_term2gene,
 #'                            id_col = "locus_tag", family = "vs_baseline")
-#' ave <- rep(1, nrow(pws$statistic_matrix))
-#' pws_c <- tps_calibrate_pathways(pws, abundance = ave, n_perm = 10, seed = 1)
-#' tps_export(tempdir(), fit = fit, states = tps_classify_states(fit))
+#' pws_c <- tps_calibrate_pathways(pws)
+#' tps_export(tempdir(), fit = fit, states = tps_classify_states(fit),
+#'            pathway_scores = pws_c)
 #' @export
 tps_export <- function(output_dir, fit = NULL, states = NULL,
                         trajectory = NULL, clusters = NULL,
@@ -137,15 +137,25 @@ tps_export <- function(output_dir, fit = NULL, states = NULL,
         write_tbl(matrix_table(m, "term"), sprintf("pathway_%s.csv", nm))
       }
     }
-    for (nm in c("p_net", "p_rem", "q_net", "q_rem",
-                 "net_null_mean", "net_null_sd",
+    write_numeric <- function(m, nm) {
+      if (is.null(m) || !is.numeric(m) || length(m) == 0L) return()
+      if (is.null(dim(m)) || length(dim(m)) != 2L) {
+        rn <- names(m)
+        if (is.null(rn)) rn <- as.character(seq_along(m))
+        m <- matrix(m, ncol = 1L, dimnames = list(rn, nm))
+      }
+      write_tbl(matrix_table(m, "term"), sprintf("pathway_%s.csv", nm))
+    }
+    ## pathway x contrast significance matrices (do not flatten to one column)
+    for (nm in c("p_directional", "p_mixed", "q_directional", "q_mixed",
+                 "p_up", "p_down",
+                 "p_net", "p_rem", "q_net", "q_rem")) {
+      write_numeric(pathway_scores[[nm]], nm)
+    }
+    for (nm in c("net_null_mean", "net_null_sd",
                  "rem_null_mean", "rem_null_sd",
                  "intergene_cor", "vif")) {
-      m <- pathway_scores[[nm]]
-      if (!is.null(m) && is.numeric(m) && length(m) > 0L) {
-        write_tbl(matrix_table(matrix(m, ncol = 1, dimnames = list(names(m), nm)),
-                               "term"), sprintf("pathway_%s.csv", nm))
-      }
+      write_numeric(pathway_scores[[nm]], nm)
     }
     write_tbl(pathway_scores, "pathway_scores.rds")
   }

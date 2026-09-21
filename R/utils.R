@@ -10,13 +10,11 @@
 ##
 ## Functions here are NOT exported. They implement the data-contract layer's
 ## plumbing: structured errors, metadata schema defaults, ID alignment.
-## All design choices traceable to STATISTICAL_CONTRACT.md section 4 and
-## LEGACY_PIPELINE_AUDIT.md section 3 (sample-name parsing, ID coverage audit).
+## All design choices traceable to STATISTICAL_CONTRACT.md.
 
 ## ---- structured error ------------------------------------------------------
 ## Errors in this package must name the offending column, sample, or group,
-## never a bare "invalid metadata". See STATISTICAL_CONTRACT.md requirement
-## and the v2 spec section 13.4 (error messages are a user interface).
+## never a bare "invalid metadata". See STATISTICAL_CONTRACT.md.
 tps_abort <- function(message, ..., call. = TRUE) {
   msg <- if (...length() > 0L) sprintf(message, ...) else message
   stop(msg, call. = call.)

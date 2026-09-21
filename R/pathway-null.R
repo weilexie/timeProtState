@@ -1,13 +1,15 @@
 ## ============================================================================
-## Pathway calibration: permutation null + classification
+## Pathway calibration: CAMERA / ROMER significance + classification
 ## ============================================================================
 ##
-## Implements STATISTICAL_CONTRACT.md section 8.4-8.5 and DECISIONS D5.
-## Applies a size-matched permutation null (default: abundance-stratified)
-## to compute empirical p_net / p_rem, BH q-values, and pathway state labels.
+## Implements STATISTICAL_CONTRACT.md, DECISIONS D5, and ADR 0011.
+## Default significance is limma competitive gene-set tests (CAMERA, or
+## ROMER when a repeated-measures block is present). NET/REM/COH are
+## summaries computed in tps_pathway_scores and are not recomputed here.
+## Permutation+VIF (ADR 0010) remains an explicit diagnostic engine.
 ##
-## Uses (+1) smoothing, per-contrast BH by default, and four-bin abundance
-## stratification with one shared permutation index across pathways.
+## Significance columns: p_directional / q_directional and p_mixed / q_mixed.
+## COH has no p-value.
 
 ## ---- stratification helpers ------------------------------------------------
 .make_abundance_bins <- function(abundance, n_bins) {
@@ -130,68 +132,363 @@
   1 + pmax(as.numeric(sizes) - 1, 0) * pmax(as.numeric(rho), 0)
 }
 
+## ---- CAMERA / ROMER / FRY helpers -----------------------------------------
+.limma_default_formals <- function(generic) {
+  ns <- asNamespace("limma")
+  meth <- paste0(generic, ".default")
+  fun <- if (exists(meth, ns, inherits = FALSE)) {
+    get(meth, ns, inherits = FALSE)
+  } else {
+    getExportedValue("limma", generic)
+  }
+  names(formals(fun))
+}
+
+.camera_has_directional <- function() {
+  fmls <- unique(c(names(formals(limma::camera)),
+                   .limma_default_formals("camera")))
+  "directional" %in% fmls
+}
+
+.empty_p_matrix <- function(terms, contrasts) {
+  matrix(NA_real_, length(terms), length(contrasts),
+         dimnames = list(terms, contrasts))
+}
+
+.match_set_stat <- function(tab, terms, column) {
+  out <- setNames(rep(NA_real_, length(terms)), terms)
+  if (is.null(tab) || is.null(dim(tab)) || is.null(rownames(tab))) {
+    return(out)
+  }
+  if (!column %in% colnames(tab)) return(out)
+  ii <- match(terms, rownames(tab))
+  ok <- !is.na(ii)
+  out[ok] <- as.numeric(tab[ii[ok], column])
+  out
+}
+
+.match_set_chr <- function(tab, terms, column) {
+  out <- setNames(rep(NA_character_, length(terms)), terms)
+  if (is.null(tab) || is.null(dim(tab)) || is.null(rownames(tab))) {
+    return(out)
+  }
+  if (!column %in% colnames(tab)) return(out)
+  ii <- match(terms, rownames(tab))
+  ok <- !is.na(ii)
+  out[ok] <- as.character(tab[ii[ok], column])
+  out
+}
+
+.run_camera <- function(y, index, design, contrast, use.ranks, directional,
+                         trend) {
+  args <- list(
+    y = y, index = index, design = design, contrast = contrast,
+    sort = FALSE, inter.gene.cor = NA, trend.var = isTRUE(trend),
+    use.ranks = isTRUE(use.ranks)
+  )
+  if (.camera_has_directional()) {
+    args$directional <- isTRUE(directional)
+  }
+  do.call(limma::camera, args)
+}
+
+.derive_test_direction <- function(p_up, p_down, hint = NULL) {
+  td <- matrix(NA_character_, nrow(p_up), ncol(p_up), dimnames = dimnames(p_up))
+  both <- is.finite(p_up) & is.finite(p_down)
+  td[both & p_up < p_down] <- "Up"
+  td[both & p_down < p_up] <- "Down"
+  if (!is.null(hint)) {
+    fill <- is.na(td) & !is.na(hint) & hint %in% c("Up", "Down")
+    td[fill] <- hint[fill]
+  }
+  td
+}
+
+.net_direction_matrix <- function(NET) {
+  nd <- matrix(NA_character_, nrow(NET), ncol(NET), dimnames = dimnames(NET))
+  ok <- is.finite(NET)
+  nd[ok & NET > 0] <- "Up"
+  nd[ok & NET < 0] <- "Down"
+  nd
+}
+
+.direction_concordant <- function(test_direction, net_direction) {
+  dc <- matrix(NA, nrow(net_direction), ncol(net_direction),
+               dimnames = dimnames(net_direction))
+  if (!is.matrix(test_direction) ||
+      !identical(dim(test_direction), dim(net_direction))) {
+    return(dc)
+  }
+  ok <- !is.na(test_direction) & !is.na(net_direction)
+  dc[ok] <- test_direction[ok] == net_direction[ok]
+  dc
+}
+
+.pathway_index <- function(scores, terms) {
+  index <- scores$index
+  if (is.null(index)) {
+    index <- .index_from_membership(scores$membership)
+  }
+  if (is.null(names(index)) || !all(terms %in% names(index))) {
+    index <- .index_from_membership(scores$membership)
+  }
+  index <- index[terms]
+  if (any(vapply(index, function(z) length(z) < 1L, logical(1L)))) {
+    tps_abort("CAMERA/ROMER index has an empty pathway; check membership.")
+  }
+  n_feat <- nrow(scores$expression)
+  bad <- vapply(index, function(z) {
+    any(!is.finite(z) | z < 1L | z > n_feat)
+  }, logical(1L))
+  if (any(bad)) {
+    tps_abort("pathway index is not aligned with expression rows.")
+  }
+  index
+}
+
+.require_competitive_inputs <- function(scores, engine_used) {
+  if (is.null(scores$expression) || !is.matrix(scores$expression) ||
+      is.null(scores$design_matrix) || !is.matrix(scores$design_matrix)) {
+    tps_abort(paste0(
+      "engine='", engine_used, "' requires scores$expression and ",
+      "scores$design_matrix. Bare statistic-matrix scores only support ",
+      "engine='permutation'."
+    ))
+  }
+  if (is.null(scores$contrast_matrix) || !is.matrix(scores$contrast_matrix)) {
+    tps_abort(paste0(
+      "engine='", engine_used, "' requires scores$contrast_matrix ",
+      "(build scores from a tps_fit, not a bare statistic matrix)."
+    ))
+  }
+  if (nrow(scores$design_matrix) != ncol(scores$expression)) {
+    tps_abort("design_matrix rows (%d) != expression columns (%d).",
+              nrow(scores$design_matrix), ncol(scores$expression))
+  }
+  if (nrow(scores$expression) != ncol(scores$membership)) {
+    tps_abort("expression rows (%d) != membership columns (%d).",
+              nrow(scores$expression), ncol(scores$membership))
+  }
+  NET <- scores$scores$NET
+  need <- colnames(NET)
+  cm <- scores$contrast_matrix
+  if (is.null(need) || is.null(colnames(cm)) || !all(need %in% colnames(cm))) {
+    tps_abort(paste0(
+      "engine='", engine_used,
+      "' requires contrast_matrix columns to match colnames of NET."
+    ))
+  }
+  if (identical(engine_used, "romer") && !is.null(scores$block_value)) {
+    if (length(scores$block_value) != ncol(scores$expression)) {
+      tps_abort("block_value length (%d) != expression columns (%d).",
+                length(scores$block_value), ncol(scores$expression))
+    }
+    if (is.null(scores$correlation) || length(scores$correlation) != 1L ||
+        !is.finite(scores$correlation)) {
+      tps_abort(paste0(
+        "engine='romer' with a block requires a finite consensus ",
+        "correlation from tps_fit."
+      ))
+    }
+  }
+  invisible(TRUE)
+}
+
+.contrast_vector <- function(contrast_matrix, contrast_name) {
+  as.numeric(contrast_matrix[, contrast_name, drop = TRUE])
+}
+
+.finalize_calibrated <- function(scores, arg_capture, fields) {
+  new_prov <- .make_provenance(arg_capture, scores, stage = "calibrate_pathways")
+  old_prov <- if (is.list(scores$provenance)) scores$provenance else list()
+  out <- scores
+  for (nm in names(fields)) {
+    out[[nm]] <- fields[[nm]]
+  }
+  n_old <- length(old_prov)
+  combined_prov <- old_prov
+  combined_prov[[n_old + 1L]] <- new_prov
+  out$provenance <- combined_prov
+  class(out) <- c("tps_pathway_calibrated", class(scores))
+  out
+}
+
+.calibrate_competitive <- function(scores, engine_used, correction, nrot, seed,
+                                    arg_capture) {
+  .require_competitive_inputs(scores, engine_used)
+  y <- as.matrix(scores$expression)
+  design <- as.matrix(scores$design_matrix)
+  NET <- scores$scores$NET
+  terms <- rownames(NET)
+  contrasts <- colnames(NET)
+  cm <- scores$contrast_matrix[, contrasts, drop = FALSE]
+  index <- .pathway_index(scores, terms)
+  trend <- scores$trend
+
+  p_directional <- .empty_p_matrix(terms, contrasts)
+  p_mixed <- .empty_p_matrix(terms, contrasts)
+  p_up <- .empty_p_matrix(terms, contrasts)
+  p_down <- .empty_p_matrix(terms, contrasts)
+  test_hint <- matrix(NA_character_, length(terms), length(contrasts),
+                      dimnames = list(terms, contrasts))
+
+  for (j in seq_along(contrasts)) {
+    cn <- contrasts[[j]]
+    cj <- .contrast_vector(cm, cn)
+    if (identical(engine_used, "camera")) {
+      cam_dir <- tryCatch(
+        .run_camera(y, index, design, cj, use.ranks = FALSE,
+                    directional = TRUE, trend = trend),
+        error = function(e) e
+      )
+      if (inherits(cam_dir, "error")) {
+        tps_abort(paste0("camera() failed for contrast '", cn, "': ",
+                         conditionMessage(cam_dir)))
+      }
+      cam_mix <- tryCatch(
+        .run_camera(y, index, design, cj, use.ranks = TRUE,
+                    directional = FALSE, trend = trend),
+        error = function(e) e
+      )
+      if (inherits(cam_mix, "error")) {
+        tps_abort(paste0("camera() failed for contrast '", cn, "': ",
+                         conditionMessage(cam_mix)))
+      }
+      p_directional[, j] <- .match_set_stat(cam_dir, terms, "PValue")
+      p_mixed[, j] <- .match_set_stat(cam_mix, terms, "PValue")
+      test_hint[, j] <- .match_set_chr(cam_dir, terms, "Direction")
+    } else if (identical(engine_used, "romer")) {
+      rom_args <- list(y = y, index = index, design = design,
+                       contrast = cj, nrot = as.integer(nrot))
+      if (!is.null(scores$block_value)) {
+        rom_args$block <- scores$block_value
+        rom_args$correlation <- scores$correlation
+      }
+      rom <- tryCatch(
+        withr::with_seed(seed, do.call(limma::romer, rom_args)),
+        error = function(e) e
+      )
+      if (inherits(rom, "error")) {
+        tps_abort(paste0("romer() failed for contrast '", cn, "': ",
+                         conditionMessage(rom)))
+      }
+      p_up[, j] <- .match_set_stat(rom, terms, "Up")
+      p_down[, j] <- .match_set_stat(rom, terms, "Down")
+      p_mixed[, j] <- .match_set_stat(rom, terms, "Mixed")
+      p_directional[, j] <- pmin(1, 2 * pmin(p_up[, j], p_down[, j]))
+    } else if (identical(engine_used, "fry")) {
+      fr <- tryCatch(
+        limma::fry(y, index = index, design = design, contrast = cj,
+                   sort = "none"),
+        error = function(e) e
+      )
+      if (inherits(fr, "error")) {
+        tps_abort(paste0("fry() failed for contrast '", cn, "': ",
+                         conditionMessage(fr)))
+      }
+      p_directional[, j] <- .match_set_stat(fr, terms, "PValue")
+      p_mixed[, j] <- .match_set_stat(fr, terms, "PValue.Mixed")
+      test_hint[, j] <- .match_set_chr(fr, terms, "Direction")
+    }
+  }
+
+  q_directional <- .adjust_p_matrix(p_directional, correction)
+  q_mixed <- .adjust_p_matrix(p_mixed, correction)
+  test_direction <- .derive_test_direction(p_up, p_down, test_hint)
+  net_direction <- .net_direction_matrix(NET)
+  null_type <- switch(engine_used,
+                      camera = "camera_competitive",
+                      romer = "romer_rotation",
+                      fry = "fry_rotation",
+                      engine_used)
+
+  .finalize_calibrated(scores, arg_capture, list(
+    p_directional = p_directional,
+    p_mixed = p_mixed,
+    q_directional = q_directional,
+    q_mixed = q_mixed,
+    p_up = p_up,
+    p_down = p_down,
+    p_net = p_directional,
+    p_rem = p_mixed,
+    q_net = q_directional,
+    q_rem = q_mixed,
+    test_direction = test_direction,
+    net_direction = net_direction,
+    direction_concordant = .direction_concordant(test_direction, net_direction),
+    engine_used = engine_used,
+    null_type = null_type,
+    nrot = as.integer(nrot),
+    seed = seed,
+    correction = correction
+  ))
+}
+
 ## ---- tps_calibrate_pathways ------------------------------------------------
-#' Calibrate pathway scores with a permutation null
+#' Calibrate pathway scores with CAMERA, ROMER, or a diagnostic permutation
 #'
-#' Applies a size-matched permutation null to a \code{tps_pathway_scores}
-#' object and computes empirical p-values for NET (two-sided around its
-#' permutation-null mean) and REM (upper-tail on its non-negative excess over
-#' the permutation-null mean), Benjamini-Hochberg q-values, and null mean/SD
-#' per pathway.
+#' Applies a gene-set significance engine to a \code{tps_pathway_scores}
+#' object. The default \code{engine = "auto"} uses \code{\link[limma]{camera}}
+#' when no repeated-measures block is present and \code{\link[limma]{romer}}
+#' when \code{scores$block_value} is not \code{NULL} (ADR 0011). Explicit
+#' \code{engine = "camera"} aborts if a block is present. \code{engine = "romer"}
+#' is allowed with or without a block. \code{engine = "fry"} is a sensitivity
+#' engine. \code{engine = "permutation"} is the ADR 0010 diagnostic
+#' permutation+VIF path.
 #'
-#' The default mode is \code{"abundance_stratified"}: proteins are binned into
+#' NET, REM, and COH are summaries from \code{\link{tps_pathway_scores}} and
+#' are not recomputed here. Significance columns are \code{p_directional} /
+#' \code{q_directional} (net direction) and \code{p_mixed} / \code{q_mixed}
+#' (mixed remodeling). COH has no p-value.
+#'
+#' CAMERA is called with \code{sort = FALSE}, \code{inter.gene.cor = NA}, and
+#' \code{trend.var} from the fit. Directional tests are parametric
+#' (\code{use.ranks = FALSE}); mixed tests use ranks. This function never
+#' calls \code{cameraPR}. ROMER uses \code{nrot} rotations with a local RNG
+#' stream (\code{seed}).
+#'
+#' Auto never switches engine because of missing values: the feature universe
+#' is formed once in \code{\link{tps_pathway_scores}}.
+#'
+#' The permutation engine remains available for diagnostics. Default
+#' \code{mode} is \code{"abundance_stratified"}: proteins are binned into
 #' \code{n_bins} equal-frequency abundance quantiles and permuted within each
-#' bin. One shared permutation index retains overlap among pathway definitions;
-#' stratification reduces differences in abundance distributions but does not
-#' preserve within-pathway protein covariance.
-#'
-#' \code{intergene = "vif"} (the default) estimates each pathway's mean
-#' pairwise residual correlation across samples (after the group-means
-#' fit) and scales the observed NET / REM excess by \code{1/sqrt(VIF)}
-#' before the permutation comparison, with
-#' \code{VIF = 1 + (k - 1) * rho}. Residuals come from
-#' \code{\link{tps_fit}} via \code{\link{tps_pathway_scores}}. This is
-#' the competitive correction for member correlation that label
-#' permutation otherwise destroys (ADR 0010). \code{intergene = "none"}
-#' is the historical unadjusted permutation (ADR 0005). VIF is 1 when
-#' residuals are unavailable (for example a bare statistic matrix).
+#' bin. \code{intergene = "vif"} estimates each pathway's mean pairwise
+#' residual correlation and scales the observed NET / REM excess by
+#' \code{1/sqrt(VIF)} before the permutation comparison, with
+#' \code{VIF = 1 + (k - 1) * rho}. Do not retune \code{vif_cap} for CAMERA
+#' or ROMER; it applies only to the permutation engine.
 #'
 #' @param scores a \code{tps_pathway_scores} object from
 #'   \code{\link{tps_pathway_scores}}.
 #' @param abundance numeric vector of per-feature abundance (e.g. AveExpr from
 #'   limma), aligned to \code{scores$feature_ids}. A named vector is reordered
 #'   when its names match either feature ids or mapped pathway ids. Required for
-#'   \code{abundance_stratified} mode; ignored for \code{unstratified}.
-#' @param n_perm integer; number of permutations (default 1000; use 5000+ for
-#'   publication).
+#'   permutation \code{abundance_stratified} mode; ignored otherwise.
+#' @param n_perm integer; number of permutations for
+#'   \code{engine = "permutation"} (default 1000; use 5000+ for publication).
 #' @param mode character; \code{"abundance_stratified"} (default) or
-#'   \code{"unstratified"}.
-#' @param n_bins integer; abundance bins for stratified mode (default 4).
+#'   \code{"unstratified"}. Used only by the permutation engine.
+#' @param n_bins integer; abundance bins for stratified permutation (default 4).
 #' @param seed integer; RNG seed (default 1). Uses a local RNG stream so the
-#'   global state is not perturbed.
+#'   global state is not perturbed. Used by ROMER and the permutation engine.
 #' @param correction character; \code{"per_contrast"} (default) applies BH
 #'   within each contrast, \code{"global"} applies BH across all
 #'   pathway x contrast tests (more conservative for multi-timepoint designs).
 #' @param intergene character; \code{"vif"} (default) applies the inter-gene
 #'   variance inflation, or \code{"none"} for the unadjusted permutation.
-#' @param vif_cap numeric; upper bound on the VIF to prevent over-correction
-#'   when pathway size is large and estimated rho is high (default \code{3}).
-#'   The compound-symmetric VIF \code{1 + (k-1)*rho} grows linearly with
-#'   pathway size and the residual-based rho estimate is noisy at proteomics
-#'   replicate counts, so an uncapped VIF can erase nearly all real-data
-#'   signal. The default cap of 3 is the validated type-I/power operating
-#'   point (simulation, rho=0.5, k=10: type-I 0.055, power 0.590; uncapped:
-#'   type-I 0.000, power 0.060; see ADR 0010). Set \code{vif_cap = Inf} to
-#'   disable the cap (maximal type-I safety, heavily conservative) or
-#'   \code{vif_cap = 1} to disable VIF scaling. Inspect the \code{$vif}
-#'   field to see your data's uncapped VIF distribution: low-correlation
-#'   data (e.g. PXD065583, median VIF 1.66) barely touches the cap, while
-#'   high-correlation data (e.g. PXD006262, median 5.43) is truncated for
-#'   most pathways — for such data also consider reporting
-#'   \code{intergene = "none"} alongside.
+#'   Used only by the permutation engine.
+#' @param vif_cap numeric; upper bound on the VIF for the permutation engine
+#'   (default \code{3}). See ADR 0010. Not used by CAMERA/ROMER/FRY.
+#' @param engine character; \code{"auto"} (default), \code{"camera"},
+#'   \code{"romer"}, \code{"fry"}, or \code{"permutation"}.
+#' @param nrot integer; rotations for ROMER (default 9999).
 #' @return a list of class \code{tps_pathway_calibrated} extending the input
-#'   with \code{p_net}, \code{p_rem}, \code{q_net}, \code{q_rem}, null summaries,
-#'   and (when \code{intergene = "vif"}) \code{intergene_cor} and \code{vif}.
+#'   with \code{p_directional}, \code{p_mixed}, \code{q_directional},
+#'   \code{q_mixed}, \code{engine_used}, and \code{null_type}. Permutation
+#'   also stores \code{p_net}/\code{p_rem} (aliased to the new names) and
+#'   null summaries. CAMERA/ROMER store the same aliases so downstream
+#'   code can read either naming scheme.
 #' @export
 #' @examples
 #' data(tps_example, package = "timeProtState")
@@ -202,29 +499,67 @@
 #' fit <- tps_fit(se, design, contrasts)
 #' pws <- tps_pathway_scores(fit, tps_example_term2gene,
 #'                            id_col = "locus_tag", family = "vs_baseline")
-#' ave <- rep(1, nrow(pws$statistic_matrix))
-#' pws_c <- tps_calibrate_pathways(pws, abundance = ave, n_perm = 10, seed = 1)
+#' pws_c <- tps_calibrate_pathways(pws, nrot = 99)
 tps_calibrate_pathways <- function(scores, abundance = NULL, n_perm = 1000L,
                                     mode = c("abundance_stratified","unstratified"),
                                     n_bins = 4L, seed = 1L,
                                     correction = c("per_contrast","global"),
                                     intergene = c("vif", "none"),
-                                    vif_cap = 3) {
-  mode <- match.arg(mode)
+                                    vif_cap = 3,
+                                    engine = c("auto", "camera", "romer",
+                                               "fry", "permutation"),
+                                    nrot = 9999L) {
+  engine <- match.arg(engine)
   correction <- match.arg(correction)
-  intergene <- match.arg(intergene)
   if (!is.numeric(vif_cap) || length(vif_cap) != 1L || is.na(vif_cap) ||
       vif_cap < 1) {
     tps_abort("vif_cap must be one numeric value >= 1 (use Inf for no cap).")
   }
+  if (!is.numeric(nrot) || length(nrot) != 1L || is.na(nrot) ||
+      !is.finite(nrot) || nrot < 1L || nrot != as.integer(nrot)) {
+    tps_abort("nrot must be one positive integer.")
+  }
+  if (!is.numeric(seed) || length(seed) != 1L || is.na(seed) ||
+      !is.finite(seed)) {
+    tps_abort("seed must be one finite value.")
+  }
   arg_capture <- list(call = "tps_calibrate_pathways", n_perm = n_perm,
                        mode = mode, n_bins = n_bins, seed = seed,
                        correction = correction, intergene = intergene,
-                       vif_cap = vif_cap,
+                       vif_cap = vif_cap, engine = engine, nrot = nrot,
                        timestamp = format(Sys.time(), "%Y-%m-%dT%H:%M:%S%z"))
   if (!inherits(scores, "tps_pathway_scores")) {
     tps_abort("scores must be a tps_pathway_scores object.")
   }
+
+  ## Missingness must not change the engine: auto keys only off block_value.
+  engine_used <- if (identical(engine, "auto")) {
+    if (!is.null(scores$block_value)) "romer" else "camera"
+  } else {
+    engine
+  }
+  if (identical(engine_used, "camera") && !is.null(scores$block_value)) {
+    tps_abort(paste0(
+      "engine='camera' cannot be used when a repeated-measures block is ",
+      "present. Use engine='romer' (the auto default when block is set) ",
+      "or engine='permutation'."
+    ))
+  }
+  if (identical(engine_used, "fry") && !is.null(scores$block_value)) {
+    tps_abort(paste0(
+      "engine='fry' cannot be used when a repeated-measures block is ",
+      "present. Use engine='romer'."
+    ))
+  }
+  if (engine_used %in% c("camera", "romer", "fry")) {
+    return(.calibrate_competitive(scores, engine_used, correction, nrot, seed,
+                                  arg_capture))
+  }
+
+  mode <- match.arg(mode)
+  intergene <- match.arg(intergene)
+  arg_capture$mode <- mode
+  arg_capture$intergene <- intergene
   eps <- 1e-12
   M <- scores$membership
   stat_mat <- scores$statistic_matrix
@@ -242,13 +577,10 @@ tps_calibrate_pathways <- function(scores, abundance = NULL, n_perm = 1000L,
       n_bins != as.integer(n_bins)) {
     tps_abort("n_bins must be one positive integer.")
   }
-  if (!is.numeric(seed) || length(seed) != 1L || is.na(seed) ||
-      !is.finite(seed)) {
-    tps_abort("seed must be one finite value.")
-  }
 
   ## abundance alignment for stratified mode
   bin_list <- NULL; bin_template <- NULL
+  ave_bin <- NULL
   if (mode == "abundance_stratified") {
     ## T03/M2: if the user did not pass abundance but the scores object
     ## carries AveExpr from the fit, use it automatically. This makes
@@ -374,48 +706,54 @@ tps_calibrate_pathways <- function(scores, abundance = NULL, n_perm = 1000L,
   dimnames(p_rem) <- dimnames(obs_rem)
   q_net <- .adjust_p_matrix(p_net, correction)
   q_rem <- .adjust_p_matrix(p_rem, correction)
+  p_up <- matrix(NA_real_, nrow(obs_net), ncol(obs_net),
+                 dimnames = dimnames(obs_net))
+  p_down <- matrix(NA_real_, nrow(obs_net), ncol(obs_net),
+                   dimnames = dimnames(obs_net))
+  test_direction <- .derive_test_direction(p_up, p_down)
+  net_direction <- .net_direction_matrix(obs_net)
 
-  ## append calibrate provenance as a new element in the provenance list.
-  new_prov <- .make_provenance(arg_capture, scores, stage = "calibrate_pathways")
-  old_prov <- if (is.list(scores$provenance)) scores$provenance else list()
-  n_old <- length(old_prov)
-  combined_prov <- old_prov
-  combined_prov[[n_old + 1L]] <- new_prov
-
-  ## build output by copying scores then overwriting/adding fields
-  ## (c() would append rather than overwrite same-named elements)
-  out <- scores
-  out$p_net <- p_net; out$p_rem <- p_rem
-  out$q_net <- q_net; out$q_rem <- q_rem
-  out$net_null_mean <- net_null_mean; out$net_null_sd <- net_null_sd
-  out$rem_null_mean <- rem_null_mean; out$rem_null_sd <- rem_null_sd
-  out$n_perm <- n_perm; out$mode <- mode; out$n_bins <- n_bins; out$seed <- seed
-  out$abundance_bins <- if (mode == "abundance_stratified") ave_bin else NULL
-  out$provenance <- combined_prov
-  out$correction <- correction
-  out$intergene <- intergene
-  out$intergene_cor <- setNames(intergene_cor, rownames(obs_net))
-  out$vif <- setNames(vif, rownames(obs_net))
-  out$vif_cap <- vif_cap
-  class(out) <- c("tps_pathway_calibrated", class(scores))
-  out
+  .finalize_calibrated(scores, arg_capture, list(
+    p_net = p_net, p_rem = p_rem,
+    q_net = q_net, q_rem = q_rem,
+    p_directional = p_net, p_mixed = p_rem,
+    q_directional = q_net, q_mixed = q_rem,
+    p_up = p_up, p_down = p_down,
+    test_direction = test_direction,
+    net_direction = net_direction,
+    direction_concordant = .direction_concordant(test_direction, net_direction),
+    net_null_mean = net_null_mean, net_null_sd = net_null_sd,
+    rem_null_mean = rem_null_mean, rem_null_sd = rem_null_sd,
+    n_perm = n_perm, mode = mode, n_bins = n_bins, seed = seed,
+    abundance_bins = if (mode == "abundance_stratified") ave_bin else NULL,
+    correction = correction,
+    intergene = intergene,
+    intergene_cor = setNames(intergene_cor, rownames(obs_net)),
+    vif = setNames(vif, rownames(obs_net)),
+    vif_cap = vif_cap,
+    engine_used = "permutation",
+    null_type = "permutation",
+    nrot = as.integer(nrot)
+  ))
 }
 
 ## ---- classification --------------------------------------------------------
-.classify_one_pathway <- function(net, rem, coh, q_net, q_rem,
+.classify_one_pathway <- function(net, rem, coh, q_directional, q_mixed,
                                    alpha = 0.05, coh_cut = 0.5) {
-  if (isTRUE(q_rem >= alpha) && isTRUE(q_net >= alpha)) return("no_strong_state")
-  if (isTRUE(q_net < alpha) && isTRUE(net > 0) && isTRUE(coh >= coh_cut)) {
+  if (isTRUE(q_mixed >= alpha) && isTRUE(q_directional >= alpha)) {
+    return("no_strong_state")
+  }
+  if (isTRUE(q_directional < alpha) && isTRUE(net > 0) && isTRUE(coh >= coh_cut)) {
     return("directional_up")
   }
-  if (isTRUE(q_net < alpha) && isTRUE(net < 0) && isTRUE(coh >= coh_cut)) {
+  if (isTRUE(q_directional < alpha) && isTRUE(net < 0) && isTRUE(coh >= coh_cut)) {
     return("directional_down")
   }
-  if (isTRUE(q_rem < alpha) &&
-      (isTRUE(q_net >= alpha) || isTRUE(coh < coh_cut))) {
+  if (isTRUE(q_mixed < alpha) &&
+      (isTRUE(q_directional >= alpha) || isTRUE(coh < coh_cut))) {
     return("mixed_remodeling")
   }
-  if (isTRUE(q_net < alpha) && isTRUE(coh < coh_cut)) {
+  if (isTRUE(q_directional < alpha) && isTRUE(coh < coh_cut)) {
     return("directional_with_internal_opposition")
   }
   "no_strong_state"
@@ -427,6 +765,8 @@ tps_calibrate_pathways <- function(scores, abundance = NULL, n_perm = 1000L,
 #' \code{tps_pathway_calibrated} object: \code{directional_up},
 #' \code{directional_down}, \code{mixed_remodeling},
 #' \code{directional_with_internal_opposition}, or \code{no_strong_state}.
+#' Labels use CAMERA/ROMER (or permutation) q-values
+#' \code{q_directional} and \code{q_mixed}.
 #'
 #' @param calibrated a \code{tps_pathway_calibrated} object from
 #'   \code{\link{tps_calibrate_pathways}}.
@@ -434,7 +774,9 @@ tps_calibrate_pathways <- function(scores, abundance = NULL, n_perm = 1000L,
 #' @param coh_cut numeric; COH threshold separating directional from
 #'   remodeling (default 0.5).
 #' @return a data.frame (long format) with one row per pathway x contrast:
-#'   term, contrast, size, NET, REM, COH, q_net, q_rem, state.
+#'   term, contrast, size, NET, REM, COH, q_directional, q_mixed, state.
+#'   \code{q_net} and \code{q_rem} are aliases of \code{q_directional} and
+#'   \code{q_mixed} for one release.
 #'
 #' @examples
 #' data(tps_example, package = "timeProtState")
@@ -445,8 +787,7 @@ tps_calibrate_pathways <- function(scores, abundance = NULL, n_perm = 1000L,
 #' fit <- tps_fit(se, design, contrasts)
 #' pws <- tps_pathway_scores(fit, tps_example_term2gene,
 #'                            id_col = "locus_tag", family = "vs_baseline")
-#' ave <- rep(1, nrow(pws$statistic_matrix))
-#' pws_c <- tps_calibrate_pathways(pws, abundance = ave, n_perm = 10, seed = 1)
+#' pws_c <- tps_calibrate_pathways(pws, nrot = 99)
 #' tps_classify_pathways(pws_c)
 #' @export
 tps_classify_pathways <- function(calibrated, alpha = 0.05, coh_cut = 0.5) {
@@ -464,7 +805,13 @@ tps_classify_pathways <- function(calibrated, alpha = 0.05, coh_cut = 0.5) {
   }
   NET <- calibrated$scores$NET; REM <- calibrated$scores$REM
   COH <- calibrated$scores$COH
-  q_net <- calibrated$q_net; q_rem <- calibrated$q_rem
+  q_directional <- calibrated$q_directional
+  q_mixed <- calibrated$q_mixed
+  if (is.null(q_directional)) q_directional <- calibrated$q_net
+  if (is.null(q_mixed)) q_mixed <- calibrated$q_rem
+  if (is.null(q_directional) || is.null(q_mixed)) {
+    tps_abort("calibrated object is missing q_directional/q_mixed.")
+  }
   sizes <- calibrated$pathway_table$observed_size
   terms <- rownames(NET); contrasts <- colnames(NET)
   rows <- list()
@@ -473,9 +820,10 @@ tps_classify_pathways <- function(calibrated, alpha = 0.05, coh_cut = 0.5) {
       rows[[length(rows) + 1L]] <- data.frame(
         term = terms[i], contrast = contrasts[j], size = sizes[i],
         NET = NET[i, j], REM = REM[i, j], COH = COH[i, j],
-        q_net = q_net[i, j], q_rem = q_rem[i, j],
+        q_directional = q_directional[i, j], q_mixed = q_mixed[i, j],
+        q_net = q_directional[i, j], q_rem = q_mixed[i, j],
         state = .classify_one_pathway(NET[i, j], REM[i, j], COH[i, j],
-                                       q_net[i, j], q_rem[i, j],
+                                       q_directional[i, j], q_mixed[i, j],
                                        alpha = alpha, coh_cut = coh_cut),
         stringsAsFactors = FALSE)
     }
@@ -483,6 +831,7 @@ tps_classify_pathways <- function(calibrated, alpha = 0.05, coh_cut = 0.5) {
   result <- if (length(rows) > 0L) do.call(rbind, rows) else data.frame(
     term = character(0), contrast = character(0), size = integer(0),
     NET = numeric(0), REM = numeric(0), COH = numeric(0),
+    q_directional = numeric(0), q_mixed = numeric(0),
     q_net = numeric(0), q_rem = numeric(0),
     state = character(0), stringsAsFactors = FALSE)
   attr(result, "provenance") <- list(
@@ -496,17 +845,25 @@ tps_classify_pathways <- function(calibrated, alpha = 0.05, coh_cut = 0.5) {
 #' @export
 print.tps_pathway_calibrated <- function(x, ...) {
   cat("<timeProtState pathway calibrated>\n")
-  cat(sprintf("  pathways: %d   contrasts: %d   n_perm: %d   mode: %s\n",
-              nrow(x$scores$NET), ncol(x$scores$NET), x$n_perm, x$mode))
-  if (x$mode == "abundance_stratified") {
-    cat(sprintf("  abundance bins: %d\n", x$n_bins))
-  }
-  ig <- if (!is.null(x$intergene)) x$intergene else "none"
-  if (identical(ig, "vif") && !is.null(x$vif)) {
-    cat(sprintf("  intergene: vif   median VIF: %.2f   median rho: %.2f\n",
-                stats::median(x$vif), stats::median(x$intergene_cor)))
-  } else {
-    cat(sprintf("  intergene: %s\n", ig))
+  engine <- if (!is.null(x$engine_used)) x$engine_used else "permutation"
+  cat(sprintf("  pathways: %d   contrasts: %d   engine: %s\n",
+              nrow(x$scores$NET), ncol(x$scores$NET), engine))
+  if (identical(engine, "permutation")) {
+    n_perm <- if (!is.null(x$n_perm)) x$n_perm else NA_integer_
+    mode <- if (!is.null(x$mode)) x$mode else NA_character_
+    cat(sprintf("  n_perm: %d   mode: %s\n", n_perm, mode))
+    if (identical(x$mode, "abundance_stratified")) {
+      cat(sprintf("  abundance bins: %d\n", x$n_bins))
+    }
+    ig <- if (!is.null(x$intergene)) x$intergene else "none"
+    if (identical(ig, "vif") && !is.null(x$vif)) {
+      cat(sprintf("  intergene: vif   median VIF: %.2f   median rho: %.2f\n",
+                  stats::median(x$vif), stats::median(x$intergene_cor)))
+    } else {
+      cat(sprintf("  intergene: %s\n", ig))
+    }
+  } else if (identical(engine, "romer") && !is.null(x$nrot)) {
+    cat(sprintf("  nrot: %d   seed: %s\n", x$nrot, x$seed))
   }
   invisible(x)
 }

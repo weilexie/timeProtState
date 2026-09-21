@@ -2,7 +2,7 @@
 % Please edit documentation in R/pathway-dynamics.R
 \name{tps_calibrate_dynamics}
 \alias{tps_calibrate_dynamics}
-\title{Calibrate trajectory-level departure with a permutation null}
+\title{Combine per-timepoint directional and mixed p-values into a trajectory p-value}
 \usage{
 tps_calibrate_dynamics(
   calibrated,
@@ -13,41 +13,42 @@ tps_calibrate_dynamics(
 )
 }
 \arguments{
-\item{calibrated}{a \code{tps_pathway_calibrated} object.}
+\item{calibrated}{a \code{tps_pathway_calibrated} object from
+\code{\link{tps_calibrate_pathways}}. Must contain \code{p_directional}
+(or permutation alias \code{p_net}) and \code{p_mixed} (or \code{p_rem}).}
 
-\item{n_perm}{integer; number of permutations for the null (default 500).}
+\item{n_perm}{ignored; retained for backward compatibility. Trajectory
+p-values are no longer permutation-based.}
 
-\item{alpha}{numeric; q-value threshold for dynamics (default 0.05).}
+\item{alpha}{numeric; q-value threshold for the descriptive shape rules
+(default 0.05). Does not enter \code{p_dynamic}.}
 
-\item{coh_cut}{numeric; COH threshold (default 0.5).}
+\item{coh_cut}{numeric; COH threshold for shape rules (default 0.5).}
 
-\item{seed}{integer; RNG seed.}
+\item{seed}{ignored; retained for backward compatibility.}
 }
 \value{
-a data.frame with the original dynamics plus a column
-  \code{p_dynamic} (empirical trajectory-level p-value) and
-  \code{q_dynamic} (BH-adjusted within each condition: one multiplicity
-  family per condition across its pathways, so the penalty does not grow
-  with the number of conditions in the object; time is absorbed into the
-  max statistic).
+a data.frame with the original dynamics plus \code{p_dynamic}
+  (Bonferroni-minP of per-time directional and mixed p-values) and
+  \code{q_dynamic} (global BH across pathway x condition).
 }
 \description{
-Permutes protein labels within the calibrated pathway score universe and
-compares each observed pathway-condition trajectory with the permutation
-distribution of its maximum standardized NET/REM evidence across time.
-This trajectory-level test accounts for searching across timepoints and
-both evidence components.
+For each pathway-condition trajectory, collects the per-timepoint
+\code{p_directional} and \code{p_mixed} values and applies a Bonferroni-minP
+combination: \code{p_traj = min(1, m * min(p_j))}, where \code{m} is the
+length of that p-value vector. \code{q_dynamic} is one global BH
+adjustment across all pathway-condition \code{p_traj} values (not a
+per-condition BH).
 }
 \details{
-\strong{Important}: \code{p_dynamic}/\code{q_dynamic} test whether the
-trajectory as a whole departs from the permutation null. They do NOT
-validate or certify a particular \code{dynamic_state} shape label. The
-shape label (from \code{\link{tps_classify_pathway_dynamics}}) is a
-rule-based descriptive phenotype; \code{q_dynamic} is an independent
-trajectory-level significance test. A pathway can have a significant
-\code{q_dynamic} with any shape label, or a non-significant
-\code{q_dynamic} with a non-trivial label — the two outputs answer
-different questions and must not be used to infer one from the other.
+This is \strong{not} a shape test. \code{p_dynamic}/\code{q_dynamic} flag
+whether any timepoint shows calibrated directional or mixed evidence;
+they do not certify a particular \code{dynamic_state} label. Shape labels
+remain the descriptive rules in \code{\link{tps_classify_pathway_dynamics}},
+which read per-time \code{q_directional}/\code{q_mixed} (not
+\code{q_dynamic}). Overlapping pathways share proteins, so
+\code{q_dynamic} should not be interpreted as a strict FDR among
+overlapping gene sets.
 }
 \examples{
 sim <- tps_simulate_timecourse(
@@ -62,6 +63,6 @@ t2g <- data.frame(term = "pw1", gene = rownames(sim$abundance)[1:4],
 pws <- tps_pathway_scores(fit, t2g, family = "vs_baseline", min_size = 3)
 pws_c <- tps_calibrate_pathways(pws, mode = "unstratified",
                                 n_perm = 2, seed = 1)
-dyn_cal <- tps_calibrate_dynamics(pws_c, n_perm = 2, seed = 1)
+dyn_cal <- tps_calibrate_dynamics(pws_c)
 nrow(dyn_cal)
 }

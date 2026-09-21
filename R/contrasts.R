@@ -2,7 +2,7 @@
 ## Contrasts: estimable contrast families for shared-baseline time-course
 ## ============================================================================
 ##
-## Implements STATISTICAL_CONTRACT.md section 5.2. Six contrast families,
+## Implements STATISTICAL_CONTRACT.md Six contrast families,
 ## each a sub-matrix of the full contrast matrix, with per-family rank audit.
 ##
 ##   A. vs_baseline      : mu_{cond,time} - mu_baseline          (single t)

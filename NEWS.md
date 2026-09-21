@@ -1,5 +1,19 @@
 # timeProtState 0.99.0
 
+## Behavior changes (2026-09-15)
+
+- `tps_calibrate_pathways()`: default `engine = "auto"` uses limma CAMERA
+  when the fit has no repeat-measures block and ROMER when a block is set
+  (ADR 0011). Significance columns are `p_directional` / `q_directional`
+  and `p_mixed` / `q_mixed`. NET, REM, and COH remain summaries (COH has
+  no p-value). Abundance-stratified permutation with VIF is a diagnostic
+  engine only (`engine = "permutation"`). `vif_cap` is not retuned
+  (diagnostic default remains 3).
+- `tps_calibrate_dynamics()`: `q_dynamic` is Bonferroni-minP of
+  per-timepoint directional and mixed p-values, then BH over pathway ×
+  condition. It is not a permutation test and not a class test of the
+  shape label.
+
 ## Behavior changes (2026-08-25)
 
 - `tps_calibrate_pathways()`: default `vif_cap` changed from `Inf` to
@@ -42,15 +56,15 @@
   (baseline modeled once).
 - Clustering: `tps_cluster_trajectories()` Mfuzz/kmeans adapter with QC;
   `tps_evaluate_k()`.
-- Pathway snapshots: `tps_pathway_scores()` NET/REM/COH;
-  `tps_calibrate_pathways()` abundance-stratified permutation with a
-  default inter-gene VIF adjustment (`intergene = "vif"`) so competitive
-  NET p-values account for member correlation and REM uses the same correction
-  as a documented first-order approximation (ADR 0010;
-  `intergene = "none"` is the historical permutation);
-  `tps_classify_pathways()`.
+- Pathway snapshots: `tps_pathway_scores()` NET/REM/COH summaries;
+  `tps_calibrate_pathways()` default `engine = "auto"` (CAMERA without a
+  block, ROMER when a repeat-measures block is set; ADR 0011), with
+  columns `p_directional` / `p_mixed`; permutation+VIF
+  (`engine = "permutation"`, ADR 0010) is diagnostic and `vif_cap` is
+  not retuned; `tps_classify_pathways()`.
 - Pathway dynamics: `tps_classify_pathway_dynamics()`,
-  `tps_calibrate_dynamics()`, `tps_divergence_score()`,
+  `tps_calibrate_dynamics()` (Bonferroni-minP + BH `q_dynamic`; not a
+  shape-class test), `tps_divergence_score()`,
   `tps_link_states_pathways()`, `tps_plot_pathway_trajectory()`.
 - Visualization: `tps_plot_volcano()`, `tps_plot_trajectories()`,
   `tps_plot_state_distribution()`, `tps_plot_pathway_states()`.

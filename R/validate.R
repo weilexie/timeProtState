@@ -3,8 +3,8 @@
 ## ============================================================================
 ##
 ## The validator is the gatekeeper for every downstream analysis. It catches
-## the failure modes documented in STATISTICAL_CONTRACT.md section 4.2 and
-## LEGACY_PIPELINE_AUDIT.md section 3:
+## the failure modes documented in STATISTICAL_CONTRACT.md and
+## ID / sample-name checks:
 ##   - duplicate sample ids            (audit 3.3: fragile parsing)
 ##   - baseline not shared             (shared-baseline grammar, the novelty)
 ##   - fewer than 2 non-baseline times (no temporal design)

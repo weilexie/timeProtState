@@ -72,9 +72,10 @@ the rule manifest are always retained for auditability.
 vector) and optional `correlation`. When `block` is supplied and
 `correlation` is `NULL`, the consensus correlation is estimated with
 `limma::duplicateCorrelation()`. A column named `replicate` is never
-treated as a block by default.
+treated as a block by default. The same `block` also selects the default
+pathway significance engine (CAMERA without a block; ROMER with a block).
 
-# Pathway NET / REM / COH
+# Pathway NET / REM / COH summaries
 
 For pathway $g$ and contrast $j$, with protein-level statistic $s_{i,j}$
 (default: moderated t):
@@ -87,49 +88,61 @@ $$\text{NET}_{g,j} = \frac{\sum_i M_{g,i} s_{i,j}}{\sum_i M_{g,i}}, \quad
 - **REM**: total remodeling magnitude
 - **COH**: directional coherence in $[0,1]$
 
-## Permutation calibration
+These quantities are **summaries**. They are not themselves a new
+competitive gene-set test. COH has no p-value.
 
-The default null is **abundance-stratified**: proteins are binned into equal-
-frequency abundance quantiles and permuted within each bin. This reduces
-abundance imbalance while retaining pathway overlap through a shared
-permutation index. Let $\mu^0$ be the permutation-null mean and $V_g$ the
-pathway VIF (1 when `intergene = "none"`). The observed NET departure is
-$d^{NET}_{obs}=|NET_{obs}-\mu^0_{NET}|/\sqrt{V_g}$, and the null departure is
-$d^{NET}_{null}=|NET_{null}-\mu^0_{NET}|$. The centred, two-sided NET p-value
-uses $+1$ smoothing:
+# Pathway significance: CAMERA and ROMER
 
-$$p_{NET} = \frac{\#\{d^{NET}_{null} \geq d^{NET}_{obs}\} + 1}
-{N_{perm} + 1}$$
+Default calibration is `engine = "auto"` in `tps_calibrate_pathways()`
+(ADR 0011):
 
-REM uses the corresponding centred upper-tail excess:
-$d^{REM}_{obs}=\max(REM_{obs}-\mu^0_{REM},0)/\sqrt{V_g}$ and
-$d^{REM}_{null}=\max(REM_{null}-\mu^0_{REM},0)$, with
-$p_{REM}=(\#\{d^{REM}_{null}\geq d^{REM}_{obs}\}+1)/(N_{perm}+1)$.
+- no `block` on the fit → `limma::camera` (independent arrays)
+- `block` present → `limma::romer` (repeat-measures rotations)
 
-**Calibration caveat**: abundance stratification reduces anti-conservative
-bias from abundance imbalance. Label permutation still breaks
-within-pathway covariance. The default `intergene = "vif"` estimates
-each pathway's mean pairwise residual correlation across samples
-(after the group-means fit) and scales the observed NET/REM excess by
-`1/sqrt(VIF)` before the permutation comparison
-(`VIF = 1 + (k-1)*rho`; ADR 0010). The VIF derivation is exact for NET
-(mean of correlated normals); applying it to REM (mean of folded normals)
-is a first-order approximation. Residual correlation is estimated
-from `tps_fit` residuals, not from the t-profiles themselves, so a
-shared pathway effect is not mistaken for noise. Use
-`intergene = "none"` only when you need the historical unadjusted
-permutation. Report both `mode` and `intergene`.
+Reported columns are `p_directional` / `q_directional` and
+`p_mixed` / `q_mixed`. Explicit `engine = "camera"` aborts if the fit
+has a block. `engine = "romer"` is allowed with or without a block.
+`engine = "fry"` and `engine = "permutation"` are explicit only; auto
+never switches engine because of missing values.
+
+CAMERA is called with `sort = FALSE`, `inter.gene.cor = NA`, and
+`trend.var` from the fit. Directional uses `directional = TRUE`
+(parametric); mixed uses `directional = FALSE` and `use.ranks = TRUE`.
+The package does not call `cameraPR`. Pathways are matched by name.
+
+ROMER reports `P.Up`, `P.Down`, and `P.Mixed`. The package stores
+`p_up` / `p_down`, sets `p_mixed = P.Mixed`, and defines
+`p_directional = min(1, 2 * min(P.Up, P.Down))` (package convention).
+Default rotations are `nrot = 9999`.
+
+The competitive universe is formed once in
+`tps_pathway_scores(tps_fit)`: features with finite statistics on the
+selected family **and** complete expression on the inference samples.
+Calibration does not change that universe or recompute NET/REM/COH.
+
+This is not a claim of a new competitive test, and not a claim of
+superiority versus CAMERA.
+
+## Permutation+VIF diagnostic
+
+Abundance-stratified label permutation with residual inter-gene VIF
+(ADR 0005, 0010) remains available as `engine = "permutation"`. It is a
+**diagnostic**, not the default significance engine. `vif_cap` is not
+retuned (diagnostic default remains 3). Use it to inspect a
+correlation-aware permutation null; do not treat it as a replacement
+for CAMERA/ROMER in the default workflow.
 
 # Contrast-driven pathway remodeling dynamics
 
 The pathway scores (NET/REM/COH) are computed for each **contrast**. By
 passing `family = "vs_baseline"` to `tps_pathway_scores()`, the package
 obtains scores for every (condition, timepoint) pair — not just the
-endpoint. This yields a **pathway remodeling trajectory**: how NET, REM, and
-COH evolve over time, calibrated by per-timepoint permutation.
+endpoint. This yields a **pathway remodeling trajectory**: how NET, REM,
+and COH evolve over time, with per-timepoint CAMERA/ROMER significance.
 
-`tps_classify_pathway_dynamics()` classifies these trajectories into
-interpretable dynamic patterns:
+`tps_classify_pathway_dynamics()` assigns **descriptive** trajectory
+shape labels from per-time `q_directional` / `q_mixed`. The labels are
+transparent rules, not class-specific statistical inferences:
 
 - **early_directional**: first timepoint NET-significant with high COH
   and a persistent, directionally consistent NET signal
@@ -147,8 +160,14 @@ Cross-condition **divergence** is reported as a separate flag at a matched
 timepoint when two significant NET directions oppose one another, or when a
 significant direction opposes a non-significant NET with magnitude above 0.1.
 
-The full rank-audited contrast family's moderated statistics drive pathway-level
-inference directly, preserving direction and uncertainty at every timepoint.
+`tps_calibrate_dynamics()` supplies a trajectory-level p-value that is
+**independent of the shape label**. For each pathway × condition it takes
+the Bonferroni-minP of the time-point directional and mixed p-values;
+`q_dynamic` is one global BH over pathway × condition. `q_dynamic` is not
+a class test of `dynamic_state`, and it is not a permutation test.
+
+The full rank-audited contrast family's moderated statistics drive the
+pathway summaries, preserving direction and uncertainty at every timepoint.
 `tps_link_states_pathways()` further connects
 protein-level evidence states to pathway-level dynamics when protein
 identifiers are mapped onto the pathway gene space (pass a **named**
@@ -165,13 +184,26 @@ compound-symmetric within-pathway correlation
 `pathway_signal` is `"none"`, `"codirectional"`, or `"mixed"`.
 The object includes `term2gene` for `tps_pathway_scores()`.
 
-Abundance-stratified label permutation does not preserve that
-within-pathway covariance. The default `intergene = "vif"` rescales
-the observed competitive scores for the estimated member correlation
-before comparing them with the permutation stream. That is a
-calibration claim (type-I closer to nominal than unadjusted
-permutation or CAMERA on the same correlated-null design), not a
-claim of higher power or more discoveries.
+The simulator is a known-truth check for summaries and engine behavior.
+It is not used to claim type-I or power superiority versus CAMERA.
+
+# Related software
+
+- **CAMERA** (limma): competitive gene-set testing with an inter-gene
+  correlation adjustment; the default significance engine here when
+  arrays are independent (no `block`).
+- **ROMER** (limma): rotation-based competitive gene-set testing in
+  linear models; the default significance engine here when a
+  repeat-measures `block` is set.
+- **fry** (limma): a fast self-contained rotation gene-set test (a fast
+  approximation to ROAST); available as an explicit engine, never
+  selected by `engine = "auto"`.
+- **piano**: consensus gene-set analysis that reports distinct-up,
+  distinct-down, and mixed directional hypotheses.
+- **directPA**: direction-specific perturbation analysis for proteomics
+  pathway responses.
+- **TcGSA**: time-course gene-set analysis for self-contained
+  longitudinal gene-set effects.
 
 # Session info
 

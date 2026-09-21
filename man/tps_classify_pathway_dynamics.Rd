@@ -16,9 +16,10 @@ tps_classify_pathway_dynamics(calibrated, alpha = 0.05, coh_cut = 0.5)
 }
 \value{
 a data.frame with columns: \code{term, condition, time, NET, REM,
-  COH, q_net, q_rem, dynamic_state} (long format, one row per
+  COH, q_directional, q_mixed, dynamic_state} (long format, one row per
   pathway-condition-time), plus a summary column \code{is_divergent} marking
-  pathways where conditions diverge.
+  pathways where conditions diverge. Legacy aliases \code{q_net} and
+  \code{q_rem} duplicate \code{q_directional} and \code{q_mixed}.
 }
 \description{
 Converts a calibrated pathway scores object (from
@@ -40,8 +41,9 @@ These labels are produced by a transparent, prioritized rule engine
 are auditable (see the source of \code{.classify_one_trajectory}) and
 intended for exploratory trajectory interpretation, not as class-specific
 statistical inferences. Use \code{\link{tps_calibrate_dynamics}} for a
-trajectory-level significance test (\code{p_dynamic}/\code{q_dynamic});
-that test is independent of the shape label.
+trajectory-level Bonferroni-minP + global BH combination
+(\code{p_dynamic}/\code{q_dynamic}); that combination is not a shape
+test and is independent of the shape label.
 
 Cross-condition NET opposition is reported as the boolean column
 \code{is_divergent}, not as a \code{dynamic_state} label.

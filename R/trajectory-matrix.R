@@ -2,7 +2,7 @@
 ## Trajectory matrix: shared-baseline-aware per-protein trajectories
 ## ============================================================================
 ##
-## Implements STATISTICAL_CONTRACT.md section 7.1 and DECISIONS D6.
+## Implements STATISTICAL_CONTRACT.md and DECISIONS D6.
 ## The legacy Mfuzz analysis copied day0 baseline as t0=0 for each condition
 ## (3x inflation, artificially weighting baseline). This module fixes that:
 ##   - unique-cell matrix: baseline appears ONCE (the correct statistical input)

@@ -2,7 +2,7 @@
 ##
 ## Tests the data-contract layer (tps_import, tps_validate, tps_provenance,
 ## tps_metadata_schema). Every error path documented in STATISTICAL_CONTRACT.md
-## section 4.2 and LEGACY_PIPELINE_AUDIT.md section 3 must have a test.
+## documented error paths must have a test.
 
 library(testthat)
 library(timeProtState)
@@ -200,7 +200,7 @@ test_that("tps_provenance extracts from result list with provenance key", {
 })
 
 ## ===========================================================================
-## invariants (STATISTICAL_CONTRACT section 2, principles)
+## invariants (STATISTICAL_CONTRACT.md)
 ## ===========================================================================
 test_that("column order of abundance does not affect the imported object", {
   idx <- sample(seq_len(30L))
