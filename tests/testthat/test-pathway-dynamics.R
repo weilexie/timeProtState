@@ -488,7 +488,7 @@ test_that("divergence_score errors on bad input", {
 })
 
 ## ===========================================================================
-## tps_calibrate_dynamics (permutation-calibrated dynamic state classification)
+## tps_calibrate_dynamics (Bonferroni-minP + global BH; n_perm is ignored)
 ## ===========================================================================
 test_that("calibrate_dynamics adds p_dynamic and q_dynamic columns", {
   d <- run_dynamics(n_perm = 100L)

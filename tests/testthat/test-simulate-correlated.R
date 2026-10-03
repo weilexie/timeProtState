@@ -1,9 +1,9 @@
 ## Tests for tps_simulate_correlated_pathways: within-pathway correlation
 ## generation, signal injection, determinism, and pipeline integration.
 ##
-## Validates the simulation tool that exposes the core calibration risk
-## flagged in STATUS section 7: the abundance-stratified permutation null
-## breaks within-pathway protein correlation.
+## The simulator only generates data. Default calibration is CAMERA/ROMER
+## (ADR 0011). Within-pathway correlation is a diagnostic concern for the
+## permutation engine (`engine = "permutation"`), not the default.
 
 ## ---- structure -------------------------------------------------------------
 test_that("tps_simulate_correlated_pathways returns expected structure", {

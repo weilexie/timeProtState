@@ -444,12 +444,12 @@ tps_inject_pathway_effect <- function(sim, term2gene, term,
 ## Generates protein-level data with explicit pathway structure AND within-
 ## pathway protein correlation (compound symmetric via a one-factor model).
 ##
-## This directly tests the core calibration risk flagged in
-## STATISTICAL_CONTRACT.md: the abundance-stratified
-## permutation null in tps_calibrate_pathways breaks within-pathway protein
-## correlation, so when the true data have positive within-pathway correlation
-## the observed NET/REM are inflated relative to the permutation null,
-## potentially producing anti-conservative type-I error.
+## This function only generates data; it does not run calibration.
+## The package default significance engine is CAMERA/ROMER (ADR 0011).
+## Within-pathway correlation inflates NET/REM relative to an
+## abundance-stratified permutation null; that risk applies to the
+## diagnostic permutation engine (`engine = "permutation"`), not to the
+## default CAMERA/ROMER path.
 ##
 ## Noise model (compound symmetric within each pathway):
 ##   epsilon[i in pathway k] = sqrt(rho) * Z_k + sqrt(1-rho) * E_i

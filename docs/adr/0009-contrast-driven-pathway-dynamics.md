@@ -16,7 +16,8 @@ conditions diverge in pathway direction over time?"
 ## Key insight (code audit)
 
 `tps_pathway_scores` and `tps_calibrate_pathways` are already
-contrast-agnostic — NET/REM/COH, permutation null, and BH q are all computed
+contrast-agnostic — NET/REM/COH summaries, CAMERA/ROMER significance
+(ADR 0011), and BH q are all computed
 per-contrast (per-column of the statistic matrix). Passing
 `family = "vs_baseline"` instead of `family = "endpoint"` immediately yields
 scores for all (condition, timepoint) pairs with **zero changes to the
@@ -47,9 +48,10 @@ pathway computation code**.
 TiDEomics does protein-level pairwise DE then standard enrichment (two-step,
 loses pathway direction structure). timeProtState uses rank-audited contrast
 families' moderated statistics to drive pathway-level inference directly —
-one integrated step that preserves direction/uncertainty and is calibrated
-per-timepoint. TiDEomics has no contrast grammar, no NET/REM/COH, no
-permutation calibration.
+one integrated step that preserves direction/uncertainty, with CAMERA/ROMER
+significance (ADR 0011) plus descriptive trajectory labels. TiDEomics has
+no contrast grammar and no NET/REM/COH summaries. This is not a claim of
+superiority versus CAMERA.
 
 ## Evidence
 

@@ -1,8 +1,12 @@
 # ADR 0010: Inter-gene VIF adjustment of the competitive permutation null
 
+> **ADR 0011 (2026-09-15) makes permutation+VIF diagnostic only
+> (`engine="permutation"`).** `vif_cap=3` remains the diagnostic cap, not
+> the default significance engine. Method description below is unchanged.
+
 - **Date**: 2026-08-15
 - **Decision ID**: D11
-- **Status**: Approved
+- **Status**: Approved (diagnostic engine; package default is ADR 0011)
 
 ## Context
 
@@ -115,10 +119,13 @@ reproducibility.
 (CAMERA 68-78; Jaccard 0.55-0.68, Spearman 0.92-0.94). PXD006262
 q<0.1 went 0 -> 2 with NET-vs-CAMERA Spearman 0.26 -> 0.83.
 
-### Default changed from `Inf` to `3` (2026-08-25)
+### Historical 2026-08-25 decision (superseded 2026-09-15)
 
-**Decision.** `vif_cap = 3` is now the default. `vif_cap = Inf` remains
-available for maximal type-I safety; `vif_cap = 1` disables VIF scaling.
+**Decision.** On 2026-08-25 `vif_cap = 3` became the permutation-engine
+cap; ADR 0011 (2026-09-15) made permutation+VIF diagnostic only
+(`engine = "permutation"`). It is not the default significance engine.
+CAMERA/ROMER do not use `vif_cap`. `vif_cap = Inf` remains available
+for maximal type-I safety; `vif_cap = 1` disables VIF scaling.
 
 **Why.** The uncapped default made the tool unusable on real data: on
 PXD006262 the default calibration found 0 significant NET pathways at the
@@ -142,7 +149,8 @@ which is precisely where the uncapped estimate is least trustworthy.
 **Validation obligations attached to this change:**
 1. Focused simulation re-run confirming the cap=3 operating point (type-I /
    power) beyond the original 20 seeds.
-2. Real-data benchmark re-runs under the new default (scripts 05, 06, 10)
+2. Real-data benchmark re-runs under the historical permutation default
+   (scripts 05, 06, 10; later superseded by ADR 0011)
    with all CSVs refreshed and parameters recorded.
 3. Documentation states the trade-off and the escape hatches
    (`vif_cap = Inf`, `intergene = "none"`).

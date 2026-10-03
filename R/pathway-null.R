@@ -845,7 +845,7 @@ tps_classify_pathways <- function(calibrated, alpha = 0.05, coh_cut = 0.5) {
 #' @export
 print.tps_pathway_calibrated <- function(x, ...) {
   cat("<timeProtState pathway calibrated>\n")
-  engine <- if (!is.null(x$engine_used)) x$engine_used else "permutation"
+  engine <- if (!is.null(x$engine_used)) x$engine_used else "unspecified"
   cat(sprintf("  pathways: %d   contrasts: %d   engine: %s\n",
               nrow(x$scores$NET), ncol(x$scores$NET), engine))
   if (identical(engine, "permutation")) {

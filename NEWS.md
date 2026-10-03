@@ -16,6 +16,14 @@
 
 ## Behavior changes (2026-08-25)
 
+> **Historical.** These bullets describe the then-default permutation
+> engine (`vif_cap = 3`) and Jaccard-vs-CAMERA concordance as a
+> sensitivity check, and they say `q_dynamic` BH is per-condition.
+> They were superseded on 2026-09-15 by CAMERA/ROMER (`engine = "auto"`)
+> and by one global BH for `q_dynamic` (see "Behavior changes
+> (2026-09-15)" above). Numbers below are a historical record, not the
+> current package default.
+
 - `tps_calibrate_pathways()`: default `vif_cap` changed from `Inf` to
   `3` (ADR 0010). The uncapped default erased nearly all real-data signal
   (0 significant NET pathways on PXD006262; 0% dynamic trajectories on
@@ -116,8 +124,10 @@
   prevent over-correction in large pathways with high estimated rho. Default
   `Inf` (no cap); empirical analysis shows cap=3 controls type-I to ~0.055
   while retaining ~59% power at rho=0.5, but the optimal cap is data-dependent.
-  (Superseded 2026-08-25: the default is now `3` — see "Behavior changes"
-  above.)
+  (Superseded 2026-08-25: the permutation default became `vif_cap = 3` —
+  see "Behavior changes (2026-08-25)" above. Superseded again 2026-09-15:
+  permutation+VIF is diagnostic only; the package default engine is
+  CAMERA/ROMER — see "Behavior changes (2026-09-15)" above.)
 
 ### Test improvements
 

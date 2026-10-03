@@ -13,7 +13,9 @@
 ##
 ## The full rank-audited contrast family's moderated statistics drive the
 ## pathway summaries directly, retaining direction and model uncertainty at
-## every timepoint before permutation calibration.
+## every timepoint. Significance is CAMERA/ROMER (ADR 0011);
+## tps_calibrate_dynamics uses Bonferroni-minP then global BH (q_dynamic),
+## not a permutation test of the shape label.
 
 ## ---- contrast-time parser --------------------------------------------------
 ## Resolve per-contrast (condition, time) metadata. Prefers the contrast_meta
