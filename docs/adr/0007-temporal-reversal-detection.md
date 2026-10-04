@@ -1,4 +1,4 @@
-# ADR 0008: Temporal reversal detection with effect-size gate
+# ADR 0007: Temporal reversal detection with effect-size gate
 
 - **Date**: 2026-08-06
 - **Decision ID**: D8

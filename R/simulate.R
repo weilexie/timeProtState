@@ -445,7 +445,7 @@ tps_inject_pathway_effect <- function(sim, term2gene, term,
 ## pathway protein correlation (compound symmetric via a one-factor model).
 ##
 ## This function only generates data; it does not run calibration.
-## The package default significance engine is CAMERA/ROMER (ADR 0011).
+## The package default significance engine is CAMERA/ROMER (ADR 0010).
 ## Within-pathway correlation inflates NET/REM relative to an
 ## abundance-stratified permutation null; that risk applies to the
 ## diagnostic permutation engine (`engine = "permutation"`), not to the

@@ -4,7 +4,7 @@
 
 - `tps_calibrate_pathways()`: default `engine = "auto"` uses limma CAMERA
   when the fit has no repeat-measures block and ROMER when a block is set
-  (ADR 0011). Significance columns are `p_directional` / `q_directional`
+  (ADR 0010). Significance columns are `p_directional` / `q_directional`
   and `p_mixed` / `q_mixed`. NET, REM, and COH remain summaries (COH has
   no p-value). Abundance-stratified permutation with VIF is a diagnostic
   engine only (`engine = "permutation"`). `vif_cap` is not retuned
@@ -25,7 +25,7 @@
 > current package default.
 
 - `tps_calibrate_pathways()`: default `vif_cap` changed from `Inf` to
-  `3` (ADR 0010). The uncapped default erased nearly all real-data signal
+  `3` (ADR 0009). The uncapped default erased nearly all real-data signal
   (0 significant NET pathways on PXD006262; 0% dynamic trajectories on
   PXD065583). Validated operating point (30 seeds, 200 perm): rho=0.2
   type-I 0.023 / power 0.713; rho=0.5 type-I 0.073 / power 0.500
@@ -34,7 +34,7 @@
 - `tps_calibrate_pathways()`: the per-pathway residual rho used by
   `intergene = "vif"` is now debiased. The clipped estimator
   `max(0, mean pairwise rho)` is upward-biased at true rho = 0, which
-  inflated every pathway's VIF above 1 even on independent data (ADR 0010,
+  inflated every pathway's VIF above 1 even on independent data (ADR 0009,
   2026-08-25). The bias floor is estimated from 50 size-matched random
   gene sets drawn from the same residuals and subtracted. Simulation
   (rho=0): power restored to 1.000 at type-I 0.010. PXD065583: NET q<0.05
@@ -66,9 +66,9 @@
   `tps_evaluate_k()`.
 - Pathway snapshots: `tps_pathway_scores()` NET/REM/COH summaries;
   `tps_calibrate_pathways()` default `engine = "auto"` (CAMERA without a
-  block, ROMER when a repeat-measures block is set; ADR 0011), with
+  block, ROMER when a repeat-measures block is set; ADR 0010), with
   columns `p_directional` / `p_mixed`; permutation+VIF
-  (`engine = "permutation"`, ADR 0010) is diagnostic and `vif_cap` is
+  (`engine = "permutation"`, ADR 0009) is diagnostic and `vif_cap` is
   not retuned; `tps_classify_pathways()`.
 - Pathway dynamics: `tps_classify_pathway_dynamics()`,
   `tps_calibrate_dynamics()` (Bonferroni-minP + BH `q_dynamic`; not a

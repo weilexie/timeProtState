@@ -1,16 +1,16 @@
-# ADR 0010: Inter-gene VIF adjustment of the competitive permutation null
+# ADR 0009: Inter-gene VIF adjustment of the competitive permutation null
 
-> **ADR 0011 (2026-09-15) makes permutation+VIF diagnostic only
+> **ADR 0010 (2026-09-15) makes permutation+VIF diagnostic only
 > (`engine="permutation"`).** `vif_cap=3` remains the diagnostic cap, not
 > the default significance engine. Method description below is unchanged.
 
 - **Date**: 2026-08-15
 - **Decision ID**: D11
-- **Status**: Approved (diagnostic engine; package default is ADR 0011)
+- **Status**: Approved (diagnostic engine; package default is ADR 0010)
 
 ## Context
 
-ADR 0005 and STATUS §15 documented that abundance-stratified label
+ADR 0004 and STATUS §15 documented that abundance-stratified label
 permutation does not preserve within-pathway protein correlation. At
 compound-symmetric `rho = 0.5`, timeProtState NET type-I rose to ~0.32
 and CAMERA directional rose to ~0.31. STATUS §15.4 left the null
@@ -45,15 +45,15 @@ effect as noise correlation and over-correct true NET.
 2. **Default is `vif`**: scale the observed NET (and REM excess) by
    `1/sqrt(VIF)` before comparing with the existing permutation stream
    (`+1` smoothing, centered NET and REM second-pass; see "REM centering"
-   section below for the Round 2 change from ADR 0005's uncentered REM).
+   section below for the Round 2 change from ADR 0004's uncentered REM).
    **Note on REM**: the VIF derivation above is exact for NET (mean of
    correlated normals). REM is the mean of |t| (folded normals), whose
    variance under correlated members has a different structure. We apply
    the NET-derived VIF to REM as a first-order approximation; this is
    reasonable because the dominant effect of correlation is the same
    variance inflation, but it is not a derived identity.
-3. `intergene = "none"` reproduces the ADR 0005 NET p-values exactly
-   (golden-master path). REM p-values differ from ADR 0005 because the
+3. `intergene = "none"` reproduces the ADR 0004 NET p-values exactly
+   (golden-master path). REM p-values differ from ADR 0004 because the
    Round 2 fix applied centered REM in both modes.
 4. `rho` is truncated to `[0, 0.99]`. Negative estimates are treated as
    0. VIF is 1 when residuals are missing, have fewer than 4 samples,
@@ -122,7 +122,7 @@ q<0.1 went 0 -> 2 with NET-vs-CAMERA Spearman 0.26 -> 0.83.
 ### Historical 2026-08-25 decision (superseded 2026-09-15)
 
 **Decision.** On 2026-08-25 `vif_cap = 3` became the permutation-engine
-cap; ADR 0011 (2026-09-15) made permutation+VIF diagnostic only
+cap; ADR 0010 (2026-09-15) made permutation+VIF diagnostic only
 (`engine = "permutation"`). It is not the default significance engine.
 CAMERA/ROMER do not use `vif_cap`. `vif_cap = Inf` remains available
 for maximal type-I safety; `vif_cap = 1` disables VIF scaling.
@@ -150,7 +150,7 @@ which is precisely where the uncapped estimate is least trustworthy.
 1. Focused simulation re-run confirming the cap=3 operating point (type-I /
    power) beyond the original 20 seeds.
 2. Real-data benchmark re-runs under the historical permutation default
-   (scripts 05, 06, 10; later superseded by ADR 0011)
+   (scripts 05, 06, 10; later superseded by ADR 0010)
    with all CSVs refreshed and parameters recorded.
 3. Documentation states the trade-off and the escape hatches
    (`vif_cap = Inf`, `intergene = "none"`).

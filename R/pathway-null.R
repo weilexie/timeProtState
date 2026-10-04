@@ -2,11 +2,11 @@
 ## Pathway calibration: CAMERA / ROMER significance + classification
 ## ============================================================================
 ##
-## Implements STATISTICAL_CONTRACT.md, DECISIONS D5, and ADR 0011.
+## Implements STATISTICAL_CONTRACT.md, DECISIONS D5, and ADR 0010.
 ## Default significance is limma competitive gene-set tests (CAMERA, or
 ## ROMER when a repeated-measures block is present). NET/REM/COH are
 ## summaries computed in tps_pathway_scores and are not recomputed here.
-## Permutation+VIF (ADR 0010) remains an explicit diagnostic engine.
+## Permutation+VIF (ADR 0009) remains an explicit diagnostic engine.
 ##
 ## Significance columns: p_directional / q_directional and p_mixed / q_mixed.
 ## COH has no p-value.
@@ -65,7 +65,7 @@
 ## moderated-t profiles: a shared pathway effect would be mistaken for
 ## noise correlation and the real NET would be over-corrected.
 ##
-## Clipping-bias debiasing (ADR 0010, 2026-08-25): the clipped estimator
+## Clipping-bias debiasing (ADR 0009, 2026-08-25): the clipped estimator
 ## max(0, mean pairwise rho) is positively biased at true rho = 0 — half
 ## the estimation-noise mass is floored at 0 while the other half stays
 ## positive, so E[rho_hat | rho = 0] > 0. With k members the bias is
@@ -430,10 +430,10 @@
 #' Applies a gene-set significance engine to a \code{tps_pathway_scores}
 #' object. The default \code{engine = "auto"} uses \code{\link[limma]{camera}}
 #' when no repeated-measures block is present and \code{\link[limma]{romer}}
-#' when \code{scores$block_value} is not \code{NULL} (ADR 0011). Explicit
+#' when \code{scores$block_value} is not \code{NULL} (ADR 0010). Explicit
 #' \code{engine = "camera"} aborts if a block is present. \code{engine = "romer"}
 #' is allowed with or without a block. \code{engine = "fry"} is a sensitivity
-#' engine. \code{engine = "permutation"} is the ADR 0010 diagnostic
+#' engine. \code{engine = "permutation"} is the ADR 0009 diagnostic
 #' permutation+VIF path.
 #'
 #' NET, REM, and COH are summaries from \code{\link{tps_pathway_scores}} and
@@ -479,7 +479,7 @@
 #'   variance inflation, or \code{"none"} for the unadjusted permutation.
 #'   Used only by the permutation engine.
 #' @param vif_cap numeric; upper bound on the VIF for the permutation engine
-#'   (default \code{3}). See ADR 0010. Not used by CAMERA/ROMER/FRY.
+#'   (default \code{3}). See ADR 0009. Not used by CAMERA/ROMER/FRY.
 #' @param engine character; \code{"auto"} (default), \code{"camera"},
 #'   \code{"romer"}, \code{"fry"}, or \code{"permutation"}.
 #' @param nrot integer; rotations for ROMER (default 9999).
@@ -660,7 +660,7 @@ tps_calibrate_pathways <- function(scores, abundance = NULL, n_perm = 1000L,
 
   ## Inter-gene VIF: label permutation destroys member correlation, so the
   ## permutation scale is too small when rho > 0. Scale the observed
-  ## departure (ADR 0010). intergene='none' keeps the ADR 0005 p-values.
+  ## departure (ADR 0009). intergene='none' keeps the ADR 0004 p-values.
   ## vif_cap limits the VIF to prevent over-correction in large pathways
   ## with high estimated rho (the compound-symmetric VIF grows linearly
   ## with k, which can over-penalize real signal).
@@ -682,7 +682,7 @@ tps_calibrate_pathways <- function(scores, abundance = NULL, n_perm = 1000L,
   net_null_ge <- matrix(0.0, n_path, n_contr)
   observed_net_departure <- abs(obs_net - net_null_mean) / vif_scale
   ## REM must also use a centered second-pass comparison, consistent with
-  ## NET. Previously (ADR 0005), REM retained the first-pass uncentered
+  ## NET. Previously (ADR 0004), REM retained the first-pass uncentered
   ## comparison, which was inconsistent with the centered NET test and
   ## biased when the protein universe has a directional shift.
   rem_null_ge <- matrix(0.0, n_path, n_contr)

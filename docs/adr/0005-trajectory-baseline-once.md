@@ -1,4 +1,4 @@
-# ADR 0006: Trajectory baseline modeled once
+# ADR 0005: Trajectory baseline modeled once
 
 - **Date**: 2026-08-06
 - **Decision ID**: D6

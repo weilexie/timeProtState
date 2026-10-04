@@ -87,6 +87,12 @@ known-truth simulation:
   `scripts/05_PXD065583_universe_thresholds.R`
 - permutation+VIF diagnostic —
   `scripts/06_permutation_vif_diagnostic.R`
+- baseline counted once versus copied —
+  `scripts/07_baseline_once_vs_copied.R`
+- same-data tool scope —
+  `scripts/08_same_data_tool_scope.R`
+- piano, endpoint statistics only —
+  `scripts/09_piano_same_endpoint.R`
 
 These benchmark scripts belong to the manuscript reproducibility bundle and
 are not distributed inside this standalone package repository. The accessions

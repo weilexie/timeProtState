@@ -1,4 +1,4 @@
-# ADR 0004: Full-rank heterogeneity contrasts + subspace invariance
+# ADR 0003: Full-rank heterogeneity contrasts + subspace invariance
 
 - **Date**: 2026-08-05
 - **Decision ID**: D4

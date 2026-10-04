@@ -68,7 +68,7 @@ Computes the directional net (NET), remodeling magnitude (REM), and
 directional coherence (COH) for each pathway x contrast, from a moderated
 statistic matrix (default: moderated t from \code{\link{tps_fit}}). This is
 the deterministic layer. Significance is applied separately via
-\code{\link{tps_calibrate_pathways}} (CAMERA/ROMER by default; ADR 0011).
+\code{\link{tps_calibrate_pathways}} (CAMERA/ROMER by default; ADR 0010).
 }
 \details{
 The scores are: \code{NET = mean(t)}, \code{REM = mean(|t|)},

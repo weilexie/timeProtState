@@ -1,4 +1,4 @@
-# ADR 0009: Contrast-driven pathway remodeling dynamics
+# ADR 0008: Contrast-driven pathway remodeling dynamics
 
 - **Date**: 2026-08-06
 - **Decision ID**: Reframe (paths 1+2+3 integration)
@@ -6,7 +6,7 @@
 
 ## Context
 
-The original pathway module (ADR 0005) computed NET/REM/COH for a single
+The original pathway module (ADR 0004) computed NET/REM/COH for a single
 endpoint contrast — a static snapshot. This was the weakest methodological
 position vs TiDEomics (Bioconductor 3.24), which does time-course DE +
 WGCNA/Trendy trajectories + standard enrichment. An endpoint-only pathway
@@ -17,7 +17,7 @@ conditions diverge in pathway direction over time?"
 
 `tps_pathway_scores` and `tps_calibrate_pathways` are already
 contrast-agnostic — NET/REM/COH summaries, CAMERA/ROMER significance
-(ADR 0011), and BH q are all computed
+(ADR 0010), and BH q are all computed
 per-contrast (per-column of the statistic matrix). Passing
 `family = "vs_baseline"` instead of `family = "endpoint"` immediately yields
 scores for all (condition, timepoint) pairs with **zero changes to the
@@ -49,7 +49,7 @@ TiDEomics does protein-level pairwise DE then standard enrichment (two-step,
 loses pathway direction structure). timeProtState uses rank-audited contrast
 families' moderated statistics to drive pathway-level inference directly —
 one integrated step that preserves direction/uncertainty, with CAMERA/ROMER
-significance (ADR 0011) plus descriptive trajectory labels. TiDEomics has
+significance (ADR 0010) plus descriptive trajectory labels. TiDEomics has
 no contrast grammar and no NET/REM/COH summaries. This is not a claim of
 superiority versus CAMERA.
 

@@ -1,4 +1,4 @@
-## Default CAMERA/ROMER engine (ADR 0011).
+## Default CAMERA/ROMER engine (ADR 0010).
 
 library(testthat)
 library(timeProtState)

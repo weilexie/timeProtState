@@ -13,7 +13,7 @@
 ##
 ## The full rank-audited contrast family's moderated statistics drive the
 ## pathway summaries directly, retaining direction and model uncertainty at
-## every timepoint. Significance is CAMERA/ROMER (ADR 0011);
+## every timepoint. Significance is CAMERA/ROMER (ADR 0010);
 ## tps_calibrate_dynamics uses Bonferroni-minP then global BH (q_dynamic),
 ## not a permutation test of the shape label.
 
@@ -48,7 +48,7 @@
              stringsAsFactors = FALSE)
 }
 
-## Column contract (ADR 0011): calibrated objects carry q_directional /
+## Column contract (ADR 0010): calibrated objects carry q_directional /
 ## q_mixed. Permutation-era aliases q_net / q_rem are accepted as fallbacks.
 .q_dir <- function(obj) {
   if (!is.null(obj$q_directional)) obj$q_directional else obj$q_net

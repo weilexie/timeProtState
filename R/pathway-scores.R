@@ -2,7 +2,7 @@
 ## Pathway scores: NET / REM / COH (deterministic, no permutation)
 ## ============================================================================
 ##
-## Implements STATISTICAL_CONTRACT.md, DECISIONS D5, and ADR 0011.
+## Implements STATISTICAL_CONTRACT.md, DECISIONS D5, and ADR 0010.
 ## This is the deterministic scoring layer (Goal 11). Competitive gene-set
 ## tests (CAMERA/ROMER) and the diagnostic permutation engine live in
 ## pathway-null.R (Goal 12). NET/REM/COH are summaries, not the significance
@@ -82,7 +82,7 @@
 #' directional coherence (COH) for each pathway x contrast, from a moderated
 #' statistic matrix (default: moderated t from \code{\link{tps_fit}}). This is
 #' the deterministic layer. Significance is applied separately via
-#' \code{\link{tps_calibrate_pathways}} (CAMERA/ROMER by default; ADR 0011).
+#' \code{\link{tps_calibrate_pathways}} (CAMERA/ROMER by default; ADR 0010).
 #'
 #' The scores are: \code{NET = mean(t)}, \code{REM = mean(|t|)},
 #' \code{COH = |NET| / (REM + eps)}. COH is a magnitude-weighted coherence
@@ -337,7 +337,7 @@ tps_pathway_scores <- function(fit, term2gene, type = "moderated_t",
 
   ## Universe once: finite statistics on every selected contrast AND complete
   ## expression on every inference sample. Do not recode missing evidence as 0.
-  ## Missingness must not change the calibration engine (ADR 0011).
+  ## Missingness must not change the calibration engine (ADR 0010).
   stat_ok <- apply(is.finite(stat_mat), 1L, all)
   expr_ok <- if (is.null(expr)) {
     rep(TRUE, length(stat_ok))

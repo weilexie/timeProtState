@@ -1,4 +1,4 @@
-## Inter-gene VIF adjustment (ADR 0010): competitive permutation scaled by
+## Inter-gene VIF adjustment (ADR 0009): competitive permutation scaled by
 ## estimated member correlation. Tests drive shipped tps_calibrate_pathways
 ## and limma::camera on tps_simulate_correlated_pathways.
 
@@ -134,7 +134,7 @@ test_that("REM type-I is controlled under VIF at rho=0.5 (multi-seed)", {
 })
 
 ## ---- golden-master: intergene="none" exact reproduction (audit gap 2) -------
-## ADR 0010 point 3 claims intergene="none" reproduces ADR 0005 p-values exactly.
+## ADR 0009 point 3 claims intergene="none" reproduces ADR 0004 p-values exactly.
 ## Lock this down: with rho=0 (independent noise), "none" and "vif" must give
 ## IDENTICAL p_net because VIF=1 and the code path is the same centered
 ## second-pass. Any future change that breaks this contract will fail here.
@@ -160,7 +160,7 @@ test_that("golden-master: intergene='none' p_net is deterministic and reproducib
 })
 
 test_that("golden-master: at rho=0, 'none' and 'vif' give near-identical p_net", {
-  ## ADR 0010 point 3 claims intergene="none" reproduces ADR 0005 exactly.
+  ## ADR 0009 point 3 claims intergene="none" reproduces ADR 0004 exactly.
   ## At rho=0 the TRUE VIF is 1, but the estimated rho from residuals has
   ## small-sample noise, so estimated VIF may be slightly >1 and p_net
   ## diverges slightly. This test locks the contract that the divergence is

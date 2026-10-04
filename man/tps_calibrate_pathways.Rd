@@ -47,7 +47,7 @@ variance inflation, or \code{"none"} for the unadjusted permutation.
 Used only by the permutation engine.}
 
 \item{vif_cap}{numeric; upper bound on the VIF for the permutation engine
-(default \code{3}). See ADR 0010. Not used by CAMERA/ROMER/FRY.}
+(default \code{3}). See ADR 0009. Not used by CAMERA/ROMER/FRY.}
 
 \item{engine}{character; \code{"auto"} (default), \code{"camera"},
 \code{"romer"}, \code{"fry"}, or \code{"permutation"}.}
@@ -66,10 +66,10 @@ a list of class \code{tps_pathway_calibrated} extending the input
 Applies a gene-set significance engine to a \code{tps_pathway_scores}
 object. The default \code{engine = "auto"} uses \code{\link[limma]{camera}}
 when no repeated-measures block is present and \code{\link[limma]{romer}}
-when \code{scores$block_value} is not \code{NULL} (ADR 0011). Explicit
+when \code{scores$block_value} is not \code{NULL} (ADR 0010). Explicit
 \code{engine = "camera"} aborts if a block is present. \code{engine = "romer"}
 is allowed with or without a block. \code{engine = "fry"} is a sensitivity
-engine. \code{engine = "permutation"} is the ADR 0010 diagnostic
+engine. \code{engine = "permutation"} is the ADR 0009 diagnostic
 permutation+VIF path.
 }
 \details{

@@ -2,7 +2,7 @@
 ## generation, signal injection, determinism, and pipeline integration.
 ##
 ## The simulator only generates data. Default calibration is CAMERA/ROMER
-## (ADR 0011). Within-pathway correlation is a diagnostic concern for the
+## (ADR 0010). Within-pathway correlation is a diagnostic concern for the
 ## permutation engine (`engine = "permutation"`), not the default.
 
 ## ---- structure -------------------------------------------------------------

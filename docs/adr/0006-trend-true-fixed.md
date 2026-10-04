@@ -1,4 +1,4 @@
-# ADR 0007: trend=TRUE as fixed default (not "auto")
+# ADR 0006: trend=TRUE as fixed default (not "auto")
 
 - **Date**: 2026-08-06
 - **Decision ID**: D7

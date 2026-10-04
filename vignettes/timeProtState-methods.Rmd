@@ -94,7 +94,7 @@ competitive gene-set test. COH has no p-value.
 # Pathway significance: CAMERA and ROMER
 
 Default calibration is `engine = "auto"` in `tps_calibrate_pathways()`
-(ADR 0011):
+(ADR 0010):
 
 - no `block` on the fit → `limma::camera` (independent arrays)
 - `block` present → `limma::romer` (repeat-measures rotations)
@@ -126,7 +126,7 @@ superiority versus CAMERA.
 ## Permutation+VIF diagnostic
 
 Abundance-stratified label permutation with residual inter-gene VIF
-(ADR 0005, 0010) remains available as `engine = "permutation"`. It is a
+(ADR 0004, 0009) remains available as `engine = "permutation"`. It is a
 **diagnostic**, not the default significance engine. `vif_cap` is not
 retuned (diagnostic default remains 3). Use it to inspect a
 correlation-aware permutation null; do not treat it as a replacement

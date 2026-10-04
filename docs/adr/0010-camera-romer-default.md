@@ -1,4 +1,4 @@
-# ADR 0011: CAMERA/ROMER as default pathway significance
+# ADR 0010: CAMERA/ROMER as default pathway significance
 
 - **Date**: 2026-09-15
 - **Status**: Approved
@@ -22,7 +22,7 @@ Universe is formed once in `tps_pathway_scores(tps_fit)`: features with finite s
 
 `tps_calibrate_dynamics()` no longer permutes. `p_traj` is Bonferroni-minP of the time-point directional and mixed p-values; `q_dynamic` is one global BH over pathway × condition. Shape labels remain descriptive rules using per-time `q_directional` / `q_mixed`.
 
-Permutation+VIF (ADR 0010) remains a diagnostic engine only. Do not retune `vif_cap`.
+Permutation+VIF (ADR 0009) remains a diagnostic engine only. Do not retune `vif_cap`.
 
 ## Consequences
 

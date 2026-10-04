@@ -1,4 +1,4 @@
-## data-raw/build_example_data.R
+## data-raw/01_build_example_data.R
 ##
 ## Generates the example datasets shipped with timeProtState. The design is
 ## SYNTHETIC shared-baseline design: 3 conditions x times 1/3/7 plus shared
@@ -6,7 +6,7 @@
 ##
 ## This script is NOT run at check time; its outputs are committed under
 ## data/ (lazy-loaded) and inst/extdata/ (file-based for vignettes).
-## Run manually: Rscript data-raw/build_example_data.R
+## Run manually: Rscript data-raw/01_build_example_data.R
 
 suppressPackageStartupMessages({
   library(Matrix)
