@@ -6,7 +6,7 @@
 \alias{timeProtState-package}
 \title{timeProtState: Contrast-Aware Pathway Remodeling Dynamics for Time-Course Proteomics}
 \description{
-Provides an auditable framework for shared-baseline, multi-condition time-course proteomics experiments. The package constructs estimable contrast families from a saturated group-means design (shared-baseline contrast grammar), decomposes protein-level temporal and condition-dependent evidence into transparent axes, and reports pathway NET, REM, and COH summaries. Pathway significance uses limma CAMERA for independent arrays or ROMER when a repeat-measures block is set. Optional repeated-measures correlation is supported in the fit. Includes trajectory clustering, correlated-pathway simulation for benchmarks, and structured export.
+Fits one shared baseline for multi-condition time-course proteomics and keeps a pathway time-path label with the endpoint call.
 }
 \author{
 \strong{Maintainer}: Weile Xie \email{weile.xie@outlook.com}

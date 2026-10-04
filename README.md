@@ -5,29 +5,8 @@ timeProtState
 
 > Contrast-aware dynamic state analysis for time-course proteomics
 
-`timeProtState` is an R/Bioconductor-style package for analyzing
-**shared-baseline, multi-condition time-course proteomics** experiments.
-It provides:
-
-- **Shared-baseline contrast grammar**: automatic construction of
-  estimable, full-rank contrast families from a saturated group-means
-  design (baseline modeled once, not copied per condition).
-- **Evidence-decomposed protein states**: temporal,
-  condition-heterogeneity, and direction axes combined into auditable
-  state labels.
-- **Pathway summaries and significance**: NET (net direction), REM
-  (remodeling magnitude), and COH (coherence) are summaries. Default
-  `engine = "auto"` tests pathways with limma CAMERA (independent
-  arrays) or ROMER (when a repeat-measures block is set). Reported
-  columns are `p_directional` / `p_mixed`. Permutation+VIF is a
-  diagnostic engine; `vif_cap` is not retuned.
-- **Optional repeated measures**: `tps_fit(block, correlation)` passes a
-  subject block to `limma::lmFit`; the consensus correlation is estimated
-  with `limma::duplicateCorrelation()` when `correlation` is omitted.
-  A block also switches pathway significance from CAMERA to ROMER.
-- **Correlated-pathway simulation**: `tps_simulate_correlated_pathways()`
-  generates known-truth data with compound-symmetric within-pathway
-  correlation for type-I / power checks.
+`timeProtState` fits one shared baseline for multi-condition time-course
+proteomics and keeps a pathway time-path label with the endpoint call.
 
 ## Installation
 
