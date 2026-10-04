@@ -7,10 +7,11 @@ Authors@R: c(
     person(given = "Tianxiang", family = "Wang",
            role = "aut"),
     person(given = "Weile", family = "Xie",
-           role = "aut"),
+           email = "1137704190@qq.com",
+           role = c("aut", "cre")),
     person(given = "Haiteng", family = "Deng",
            email = "dht@mail.tsinghua.edu.cn",
-           role = c("aut", "cre")))
+           role = "aut"))
 Description: Fits one shared baseline for multi-condition time-course
     proteomics and keeps a pathway time-path label with the endpoint call.
 License: Artistic-2.0 | file LICENSE

@@ -9,6 +9,6 @@
 Fits one shared baseline for multi-condition time-course proteomics and keeps a pathway time-path label with the endpoint call.
 }
 \author{
-\strong{Maintainer}: Haiteng Deng \email{dht@mail.tsinghua.edu.cn}
+\strong{Maintainer}: Weile Xie \email{1137704190@qq.com}
 
 }
