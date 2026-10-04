@@ -2,9 +2,13 @@ cff-version: 1.2.0
 message: "If you use this software, please cite it as below."
 title: "timeProtState: contrast-aware pathway remodeling dynamics for time-course proteomics"
 authors:
+  - family-names: "Wang"
+    given-names: "Tianxiang"
   - family-names: "Xie"
     given-names: "Weile"
-    email: "weile.xie@outlook.com"
+  - family-names: "Deng"
+    given-names: "Haiteng"
+    email: "dht@mail.tsinghua.edu.cn"
 version: "0.99.0"
 date-released: "2026-08-15"
 license: Artistic-2.0
