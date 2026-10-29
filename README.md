@@ -11,9 +11,8 @@ proteomics and keeps a pathway time-path label with the endpoint call.
 ## Installation
 
 ``` r
-# From a local clone/source directory:
 # remotes::install_local(".")
-# remotes::install_github("ORG/timeProtState")  # fill after the public repo exists
+remotes::install_github("weilexie/timeProtState@v0.99.0")
 ```
 
 ## Quick start
