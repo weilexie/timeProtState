@@ -12,7 +12,7 @@ proteomics and keeps a pathway time-path label with the endpoint call.
 
 ``` r
 # remotes::install_local(".")
-remotes::install_github("weilexie/timeProtState@v0.99.0")
+remotes::install_github("weilexie/timeProtState@v0.99.1")
 ```
 
 ## Quick start

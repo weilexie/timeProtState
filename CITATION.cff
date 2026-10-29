@@ -10,8 +10,8 @@ authors:
   - family-names: "Deng"
     given-names: "Haiteng"
     email: "dht@mail.tsinghua.edu.cn"
-version: "0.99.0"
-date-released: "2026-08-15"
+version: "0.99.1"
+date-released: "2026-10-29"
 license: Artistic-2.0
 keywords:
   - proteomics

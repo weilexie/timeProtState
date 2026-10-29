@@ -1,3 +1,10 @@
+# timeProtState 0.99.1
+
+## Packaging (2026-10-29)
+
+- Test suite reduced to a core import, design, fit, and CAMERA pathway
+  smoke path for the submission build.
+
 # timeProtState 0.99.0
 
 ## Behavior changes (2026-09-15)

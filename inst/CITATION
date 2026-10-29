@@ -5,8 +5,8 @@ bibentry(
   title = "timeProtState: contrast-aware pathway remodeling dynamics for time-course proteomics",
   author = person(given = "Weile", family = "Xie"),
   year = "2026",
-  note = "R package version 0.99.0",
+  note = "R package version 0.99.1",
   textVersion = paste("Weile Xie (2026).",
     "timeProtState: contrast-aware pathway remodeling dynamics",
-    "for time-course proteomics. R package version 0.99.0.")
+    "for time-course proteomics. R package version 0.99.1.")
 )
